@@ -104,7 +104,7 @@ function freshProject(): ProjectState {
     conversation: [],
     history: [],
     historyIndex: -1,
-    iconSize: 96,
+    iconSize: 168,
     strokeWidth: 2,
     strokeColor: "#171717",
     fillColor: "none",
@@ -299,14 +299,18 @@ export const useProjectStore = create<Store>((set, get) => ({
       // Auto-create letter when generating after approval flow; user can also call approveLetter
     }
 
-    const animation = generateAnimationFromPlan(
+    const generated = generateAnimationFromPlan(
       project.plan,
       components,
       project.intent,
       lastUser || project.plan.steps.map((s) => s.description).join(" "),
     );
+    // Loop by default so the canvas keeps a live preview after generation
+    const animation = {
+      ...generated,
+      loop: true,
+    };
 
-    // Apply transform origins from components onto tracks conceptually via store components
     const hist = pushHistory(project, animation);
     set({
       project: {
@@ -314,12 +318,14 @@ export const useProjectStore = create<Store>((set, get) => ({
         ...hist,
         parsed,
         components,
+        iconSize: Math.max(project.iconSize, 168),
       },
       ui: {
         ...ui,
         currentTime: 0,
         playing: true,
         readyToGenerate: false,
+        zoom: Math.max(ui.zoom, 1.5),
       },
     });
   },
