@@ -29,6 +29,11 @@ import {
   shouldAskClarification,
 } from "@/lib/ai/rules-engine";
 import { saveProject } from "@/lib/persistence/db";
+import {
+  buildMotionProperties,
+  type MotionToolId,
+} from "@/lib/animation/motions";
+import type { ElementTrack } from "@/lib/animation/types";
 
 export type CanvasBg = "canvas" | "white" | "transparent";
 
@@ -103,6 +108,21 @@ interface Store {
     patch: { time?: number; value?: number | string },
   ) => void;
   setDuration: (ms: number) => void;
+  ensureAnimation: () => void;
+  applyMotionTool: (tool: MotionToolId) => void;
+  setPropertyAtPlayhead: (
+    componentId: string,
+    property:
+      | "x"
+      | "y"
+      | "rotation"
+      | "scaleX"
+      | "scaleY"
+      | "opacity"
+      | "skewX"
+      | "skewY",
+    value: number,
+  ) => void;
 }
 
 function freshProject(): ProjectState {
@@ -755,6 +775,137 @@ export const useProjectStore = create<Store>((set, get) => ({
       })),
     };
     get().updateAnimation(animation);
+  },
+
+  ensureAnimation: () => {
+    const { project } = get();
+    if (project.animation) return;
+    const doc: AnimationDocument = {
+      id: `anim_${nanoid(8)}`,
+      name: project.name || "Animation",
+      duration: 1200,
+      fps: 60,
+      loop: true,
+      direction: "normal",
+      playbackSpeed: 1,
+      tracks: [],
+      background: "transparent",
+    };
+    get().updateAnimation(doc);
+  },
+
+  applyMotionTool: (tool) => {
+    const { project, ui } = get();
+    const selected =
+      project.components.find((c) => ui.selectedComponentIds.includes(c.id)) ??
+      project.components[0];
+    if (!selected) return;
+
+    if (!project.animation) get().ensureAnimation();
+    const current = get().project;
+    if (!current.animation) return;
+
+    const duration = current.animation.duration || 1200;
+    const motionProps = buildMotionProperties(tool, duration);
+    let tracks = [...current.animation.tracks];
+
+    for (const elementId of selected.elementIds) {
+      const existingIdx = tracks.findIndex((t) => t.elementId === elementId);
+      const existing: ElementTrack =
+        existingIdx >= 0
+          ? tracks[existingIdx]
+          : {
+              elementId,
+              name: selected.name,
+              properties: [],
+            };
+
+      const propMap = new Map(existing.properties.map((p) => [p.property, p]));
+      for (const p of motionProps) {
+        propMap.set(p.property, p);
+      }
+
+      const nextTrack: ElementTrack = {
+        ...existing,
+        name: selected.name,
+        properties: Array.from(propMap.values()),
+      };
+
+      if (existingIdx >= 0) tracks[existingIdx] = nextTrack;
+      else tracks.push(nextTrack);
+    }
+
+    get().updateAnimation({
+      ...current.animation,
+      tracks,
+      loop: true,
+    });
+    get().setPlaying(true);
+    get().setCurrentTime(0);
+  },
+
+  setPropertyAtPlayhead: (componentId, property, value) => {
+    const { project, ui } = get();
+    const component = project.components.find((c) => c.id === componentId);
+    if (!component) return;
+    if (!project.animation) get().ensureAnimation();
+    const anim = get().project.animation;
+    if (!anim) return;
+
+    const time = Math.round(ui.currentTime);
+    let tracks = [...anim.tracks];
+
+    for (const elementId of component.elementIds) {
+      const idx = tracks.findIndex((t) => t.elementId === elementId);
+      const track: ElementTrack =
+        idx >= 0
+          ? { ...tracks[idx], properties: [...tracks[idx].properties] }
+          : { elementId, name: component.name, properties: [] };
+
+      const pIdx = track.properties.findIndex((p) => p.property === property);
+      if (pIdx >= 0) {
+        const prop = track.properties[pIdx];
+        const sorted = [...prop.keyframes].sort((a, b) => a.time - b.time);
+        let nearest = sorted[0];
+        let best = Infinity;
+        for (const k of sorted) {
+          const d = Math.abs(k.time - time);
+          if (d < best) {
+            best = d;
+            nearest = k;
+          }
+        }
+        if (nearest && best <= 40) {
+          track.properties[pIdx] = {
+            ...prop,
+            keyframes: prop.keyframes.map((k) =>
+              k.id === nearest.id ? { ...k, value } : k,
+            ),
+          };
+        } else {
+          track.properties[pIdx] = {
+            ...prop,
+            keyframes: [
+              ...prop.keyframes,
+              { id: `kf_${nanoid(6)}`, time, value, easing: "easeInOut" },
+            ],
+          };
+        }
+      } else {
+        track.properties.push({
+          property,
+          keyframes: [
+            { id: `kf_${nanoid(6)}`, time: 0, value: property.startsWith("scale") ? 1 : property === "opacity" ? 1 : 0 },
+            { id: `kf_${nanoid(6)}`, time, value, easing: "easeInOut" },
+          ],
+        });
+      }
+
+      if (idx >= 0) tracks[idx] = track;
+      else tracks.push(track);
+    }
+
+    get().updateAnimation({ ...anim, tracks });
   },
 }));
 
