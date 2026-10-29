@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Check,
   Download,
   MoreHorizontal,
   PanelLeft,
+  Pencil,
   Redo2,
   Undo2,
+  X,
 } from "lucide-react";
 import { IconBrowser } from "@/components/library/IconBrowser";
 import { AnimationCanvas } from "@/components/canvas/AnimationCanvas";
@@ -25,6 +28,7 @@ export function AppShell() {
   const setRightOpen = useProjectStore((s) => s.setRightOpen);
   const setTimelineHeight = useProjectStore((s) => s.setTimelineHeight);
   const setExportOpen = useProjectStore((s) => s.setExportOpen);
+  const setProjectName = useProjectStore((s) => s.setProjectName);
   const persist = useProjectStore((s) => s.persist);
   const loadProjectState = useProjectStore((s) => s.loadProjectState);
   const newProject = useProjectStore((s) => s.newProject);
@@ -33,6 +37,9 @@ export function AppShell() {
   const undo = useProjectStore((s) => s.undo);
   const redo = useProjectStore((s) => s.redo);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   useEffect(() => {
     if (!project.icon) return;
@@ -86,21 +93,69 @@ export function AppShell() {
         >
           <PanelLeft className="h-4 w-4" />
         </button>
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-2">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#0f9f8a] text-[10px] font-bold text-white">
             Ai
           </div>
-          <input
-            className="min-w-0 truncate border-0 bg-transparent text-sm font-medium outline-none placeholder:text-[var(--text-secondary)]"
-            value={project.name}
-            placeholder="Untitled animation"
-            onChange={(e) =>
-              useProjectStore.setState((s) => ({
-                project: { ...s.project, name: e.target.value },
-              }))
-            }
-            aria-label="Project name"
-          />
+          {editingTitle ? (
+            <div className="flex min-w-0 items-center gap-1">
+              <input
+                ref={titleInputRef}
+                className="min-w-0 max-w-[220px] truncate rounded-md border border-[#0f9f8a]/40 bg-[var(--bg)] px-2 py-0.5 text-sm font-medium outline-none"
+                value={titleDraft}
+                placeholder="Untitled animation"
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setProjectName(titleDraft.trim());
+                    setEditingTitle(false);
+                    void persist();
+                  }
+                  if (e.key === "Escape") setEditingTitle(false);
+                }}
+                aria-label="Edit project name"
+              />
+              <button
+                type="button"
+                className="rounded-md p-1 text-[#0b7f6e] hover:bg-[#0f9f8a]/10"
+                title="Save name"
+                onClick={() => {
+                  setProjectName(titleDraft.trim());
+                  setEditingTitle(false);
+                  void persist();
+                }}
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-black/[0.04]"
+                title="Cancel"
+                onClick={() => setEditingTitle(false)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-1">
+              <span className="truncate text-sm font-medium text-[var(--text)]">
+                {project.name || "Untitled animation"}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 rounded-md p-1 text-[var(--text-secondary)] transition-colors hover:bg-black/[0.04] hover:text-[var(--text)]"
+                title="Rename"
+                aria-label="Rename project"
+                onClick={() => {
+                  setTitleDraft(project.name);
+                  setEditingTitle(true);
+                  requestAnimationFrame(() => titleInputRef.current?.focus());
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-0.5">

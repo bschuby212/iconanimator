@@ -60,6 +60,11 @@ export function Timeline() {
     <div className="flex h-full flex-col bg-white">
       <div className="flex min-h-0 flex-1 overflow-auto">
         <div className="w-28 shrink-0 border-r border-[var(--border)] sm:w-36">
+          <div className="flex h-[44px] items-end border-b border-[var(--border)] bg-[var(--bg)] px-2 pb-1.5">
+            <span className="text-[10px] font-medium text-[var(--text-secondary)]">
+              Layers
+            </span>
+          </div>
           {rows.map((row) => {
             const propCount = row.tracks.reduce(
               (n, t) => n + t.properties.length,
@@ -94,16 +99,27 @@ export function Timeline() {
         </div>
 
         <div className="relative min-w-0 flex-1">
+          <div className="flex h-6 items-center justify-between border-b border-[var(--border)] bg-[var(--bg)] px-2">
+            <span
+              className="text-[10px] tabular-nums text-[var(--text-secondary)]"
+              data-testid="timecode"
+            >
+              {Math.round(ui.currentTime)}ms
+            </span>
+            <span className="text-[10px] tabular-nums text-[var(--text-secondary)]">
+              {duration}ms
+            </span>
+          </div>
           <div
             ref={trackRef}
-            className="relative cursor-ew-resize border-b border-[var(--border)] bg-[var(--bg)]"
-            style={{ height: 24, minWidth: "100%" }}
+            className="relative cursor-ew-resize border-b border-[var(--border)] bg-white"
+            style={{ height: 20, minWidth: "100%" }}
             onMouseDown={(e) => onScrub(e.clientX)}
           >
             {[0, 0.25, 0.5, 0.75, 1].map((f) => (
               <span
                 key={f}
-                className="absolute top-1 text-[9px] text-[var(--text-secondary)]"
+                className="absolute top-0.5 text-[9px] text-[var(--text-secondary)]"
                 style={{ left: `${f * 100}%` }}
               >
                 {Math.round(duration * f)}

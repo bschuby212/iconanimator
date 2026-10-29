@@ -63,6 +63,8 @@ interface Store {
   setRightTab: (tab: RightTab) => void;
   setTimelineHeight: (h: number) => void;
   restoreCreation: (id: string) => void;
+  deleteCreation: (id: string) => void;
+  setProjectName: (name: string) => void;
   duplicateProject: () => void;
   clearAnimation: () => void;
   setZoom: (z: number) => void;
@@ -464,6 +466,54 @@ export const useProjectStore = create<Store>((set, get) => ({
       },
     });
   },
+
+  deleteCreation: (id) => {
+    const { project, ui } = get();
+    const next = (project.creationHistory ?? []).filter((e) => e.id !== id);
+    const clearingActive = project.activeCreationId === id;
+    set({
+      project: {
+        ...project,
+        creationHistory: next,
+        ...(clearingActive
+          ? {
+              activeCreationId: null,
+              icon: null,
+              parsed: null,
+              components: [],
+              animation: null,
+              plan: null,
+              conversation: [],
+              history: [],
+              historyIndex: -1,
+            }
+          : {}),
+      },
+      ui: clearingActive
+        ? {
+            ...ui,
+            currentTime: 0,
+            playing: false,
+            selectedComponentIds: [],
+            selectedElementIds: [],
+            readyToGenerate: false,
+            rightTab: "chat",
+          }
+        : ui,
+    });
+  },
+
+  setProjectName: (name) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        name,
+        creationHistory: upsertCreation(
+          { ...s.project, name },
+          { name },
+        ),
+      },
+    })),
 
   duplicateProject: () => {
     const { project } = get();

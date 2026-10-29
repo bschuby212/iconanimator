@@ -160,11 +160,6 @@ export function AnimationCanvas() {
             <option value="white">White</option>
             <option value="transparent">Clear</option>
           </select>
-          {project.animation && (
-            <span className="ml-1 pr-1 text-[11px] tabular-nums text-[var(--text-secondary)]" data-testid="timecode">
-              {Math.round(ui.currentTime)}ms
-            </span>
-          )}
         </div>
       </div>
 
