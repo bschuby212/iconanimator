@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Wand2 } from "lucide-react";
 import { useProjectStore } from "@/store/project-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
+
+function isRedundantAssistantLine(content: string) {
+  return (
+    content.startsWith("Selected ") ||
+    content.startsWith("Got it. I'll plan") ||
+    content.startsWith("Here’s a plan") ||
+    content.startsWith("Here's a plan")
+  );
+}
 
 export function AiPromptBar() {
   const project = useProjectStore((s) => s.project);
@@ -16,13 +25,24 @@ export function AiPromptBar() {
   const [draft, setDraft] = useState("");
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const showChat =
-    expanded || project.conversation.length > 1 || !!project.plan || !!project.animation;
+
+  const messages = useMemo(() => {
+    // Drop bootstrap/redundant system lines; keep a short recent thread
+    return project.conversation
+      .filter((m) => m.role === "user" || !isRedundantAssistantLine(m.content))
+      .slice(-6);
+  }, [project.conversation]);
+
+  const showPanel =
+    expanded ||
+    messages.length > 0 ||
+    (!!project.plan && !project.animation) ||
+    !!project.animation;
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [project.conversation.length]);
+  }, [messages.length, project.plan?.steps.length, project.animation]);
 
   if (!project.icon) return null;
 
@@ -36,17 +56,34 @@ export function AiPromptBar() {
 
   const canGenerate =
     !!project.plan &&
+    !project.animation &&
     (ui.readyToGenerate || !project.plan.limitations?.length);
+
+  const primaryAction = project.animation
+    ? "apply"
+    : canGenerate && !draft.trim()
+      ? "generate"
+      : project.plan && !project.animation
+        ? draft.trim()
+          ? "send"
+          : "generate"
+        : "send";
 
   return (
     <div className="shrink-0 border-t border-[var(--border)] bg-white">
-      {showChat && (project.conversation.length > 0 || project.plan) && (
+      {showPanel && (
         <div
           ref={scrollRef}
-          className="max-h-[240px] space-y-2 overflow-y-auto px-4 py-3"
+          className="max-h-[400px] space-y-3 overflow-y-auto px-4 py-3"
         >
-          {project.conversation.slice(-4).map((m) => (
-            <div key={m.id} className="text-[13px] leading-relaxed">
+          {messages.map((m) => (
+            <div
+              key={m.id}
+              className={cn(
+                "text-[13px] leading-relaxed",
+                m.role === "user" ? "text-[var(--text)]" : "text-[var(--text-secondary)]",
+              )}
+            >
               <span
                 className={cn(
                   "mr-1.5 font-medium",
@@ -55,39 +92,22 @@ export function AiPromptBar() {
               >
                 {m.role === "user" ? "You" : "AI"}
               </span>
-              <span className="text-[var(--text-secondary)]">{m.content}</span>
+              {m.content}
             </div>
           ))}
 
-          {project.plan && (
-            <div className="rounded-lg bg-[var(--bg)] px-3 py-2.5">
-              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-medium text-[var(--text)]">
-                  Plan · {project.plan.duration}ms · {project.plan.style}
-                </p>
-                {!project.animation && (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={!canGenerate || ui.generating}
-                    onClick={() => generateFromPlan()}
-                  >
-                    {ui.generating ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Wand2 className="h-3.5 w-3.5" />
-                    )}
-                    Generate
-                  </Button>
-                )}
-              </div>
-              <ol className="list-decimal space-y-0.5 pl-4 text-xs text-[var(--text-secondary)]">
+          {project.plan && !project.animation && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
+              <p className="mb-2 text-xs font-medium text-[var(--text)]">
+                Plan · {project.plan.duration}ms · {project.plan.style}
+              </p>
+              <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-[var(--text-secondary)]">
                 {project.plan.steps.map((s) => (
                   <li key={s.id}>{s.description}</li>
                 ))}
               </ol>
               {project.plan.limitations?.map((l) => (
-                <p key={l} className="mt-1.5 text-xs text-amber-700">
+                <p key={l} className="mt-2 text-xs text-amber-700">
                   {l}
                 </p>
               ))}
@@ -101,6 +121,12 @@ export function AiPromptBar() {
               ))}
             </div>
           )}
+
+          {project.animation && (
+            <p className="text-xs text-[var(--text-secondary)]">
+              Animation ready · describe a change to refine
+            </p>
+          )}
         </div>
       )}
 
@@ -111,7 +137,8 @@ export function AiPromptBar() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              onSubmit();
+              if (primaryAction === "generate" && !draft.trim()) generateFromPlan();
+              else onSubmit();
             }
           }}
           onFocus={() => setExpanded(true)}
@@ -123,22 +150,28 @@ export function AiPromptBar() {
           className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm outline-none transition-colors placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)] focus:bg-white"
           data-testid="ai-prompt"
         />
-        {!project.plan || project.animation ? (
-          <Button size="md" variant="primary" onClick={onSubmit} disabled={!draft.trim()}>
-            {project.animation ? "Apply" : "Send"}
+        {primaryAction === "generate" ? (
+          <Button
+            size="md"
+            variant="primary"
+            onClick={() => generateFromPlan()}
+            disabled={!canGenerate || ui.generating}
+          >
+            {ui.generating ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Wand2 className="h-3.5 w-3.5" />
+            )}
+            Generate
           </Button>
         ) : (
           <Button
             size="md"
             variant="primary"
-            onClick={() => {
-              if (draft.trim()) onSubmit();
-              else if (canGenerate) generateFromPlan();
-            }}
-            disabled={ui.generating || (!draft.trim() && !canGenerate)}
+            onClick={onSubmit}
+            disabled={!draft.trim() || ui.generating}
           >
-            <Wand2 className="h-3.5 w-3.5" />
-            Generate
+            {project.animation ? "Apply" : "Send"}
           </Button>
         )}
       </div>

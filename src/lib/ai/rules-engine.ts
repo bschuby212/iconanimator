@@ -698,20 +698,21 @@ export function chatReply(
     const lid = findComponentByRole(components, "lid");
     if (gear) {
       return {
-        message: `I can rotate the gear clockwise, scale it up slightly, then return it to its original size. Available parts: ${names}. Would you prefer something subtle or more playful?`,
+        message:
+          "I can rotate the gear, scale it up, then ease back. Subtle or more playful?",
         readyToGenerate: false,
         updatePlan: true,
       };
     }
     if (lid) {
       return {
-        message: `I can open the lid around its hinge, pause briefly, then close it. Available parts: ${names}. Subtle or more expressive?`,
+        message: "I can open the lid, pause, then close it. Subtle or more expressive?",
         readyToGenerate: false,
         updatePlan: true,
       };
     }
     return {
-      message: `For ${iconName}, I can animate: ${names}. I suggest a short ${intent.intensity} motion on the primary part. Want subtle, expressive, or playful?`,
+      message: `I can animate ${names} with a short ${intent.intensity} motion. Subtle, expressive, or playful?`,
       readyToGenerate: false,
       updatePlan: true,
     };
@@ -719,7 +720,7 @@ export function chatReply(
 
   if (p.includes("subtle")) {
     return {
-      message: `I'll keep movements small and timing short for a restrained ${iconName} animation.`,
+      message: "Keeping motion small and timing short.",
       readyToGenerate: true,
       updatePlan: true,
     };
@@ -727,7 +728,7 @@ export function chatReply(
 
   // Clear request — allow immediate generation
   return {
-    message: `Got it. I'll plan a component-level animation for ${iconName} using: ${names}.`,
+    message: "Here’s a plan — generate when you’re ready.",
     readyToGenerate: true,
     updatePlan: true,
   };

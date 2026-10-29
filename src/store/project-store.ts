@@ -190,11 +190,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         components,
         animation: null,
         plan: null,
-        conversation: [
-          createAssistantMessage(
-            `Selected ${icon.name} from ${icon.library}. Detected components: ${components.map((c) => c.name).join(", ") || "none"}. How would you like this icon to animate?`,
-          ),
-        ],
+        conversation: [],
         name: `${icon.name} animation`,
       },
       ui: {
@@ -361,9 +357,7 @@ export const useProjectStore = create<Store>((set, get) => ({
     const userMsg = createUserMessage(message);
     const refined = refineAnimation(project.animation, message);
     // Also update plan if request is plan-like before generation — already have animation
-    const assistant = createAssistantMessage(
-      "Updated the animation while preserving unrelated properties.",
-    );
+    const assistant = createAssistantMessage("Updated.");
     const hist = pushHistory(project, refined);
     set({
       project: {
