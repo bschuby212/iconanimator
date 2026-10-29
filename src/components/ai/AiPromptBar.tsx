@@ -43,7 +43,7 @@ export function AiPromptBar() {
       {showChat && (project.conversation.length > 0 || project.plan) && (
         <div
           ref={scrollRef}
-          className="max-h-36 space-y-2 overflow-y-auto px-4 py-3 sm:max-h-44"
+          className="max-h-56 space-y-2 overflow-y-auto px-4 py-3 sm:max-h-72"
         >
           {project.conversation.slice(-4).map((m) => (
             <div key={m.id} className="text-[13px] leading-relaxed">
