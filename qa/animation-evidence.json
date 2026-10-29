@@ -1,0 +1,395 @@
+[
+  {
+    "icon": "tabler:settings",
+    "prompt": "Rotate the gear clockwise, make it grow slightly, then shrink back to its original size.",
+    "components": [
+      {
+        "name": "Gear",
+        "role": "gear",
+        "elements": 1
+      },
+      {
+        "name": "Center",
+        "role": "center",
+        "elements": 1
+      }
+    ],
+    "duration": 1200,
+    "trackCount": 2,
+    "planSteps": [
+      "Rotate the gear clockwise 180°.",
+      "Scale up to 110%.",
+      "Return scale to 100%."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 400,
+        "rotation": 139.99999999999997,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1.077777777777778
+      },
+      {
+        "time": 1000,
+        "rotation": 180,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1.0222222222222221
+      }
+    ],
+    "result": "Pass"
+  },
+  {
+    "icon": "tabler:trash",
+    "prompt": "Open the trash can lid, pause briefly, then close it.",
+    "components": [
+      {
+        "name": "Container",
+        "role": "body",
+        "elements": 1
+      },
+      {
+        "name": "Lid",
+        "role": "lid",
+        "elements": 4
+      }
+    ],
+    "duration": 1200,
+    "trackCount": 4,
+    "planSteps": [
+      "Keep the trash can body stationary.",
+      "Rotate the lid upward ~45° around its hinge.",
+      "Hold the lid open briefly.",
+      "Rotate the lid back to its original position.",
+      "Apply a subtle settling motion."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 300,
+        "rotation": -41.83673469387755,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 600,
+        "rotation": -50,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 1000,
+        "rotation": -13.717421124828533,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      }
+    ],
+    "result": "Pass"
+  },
+  {
+    "icon": "tabler:edit",
+    "prompt": "Keep the paper still while the pencil moves across it like someone is writing.",
+    "components": [
+      {
+        "name": "Paper",
+        "role": "paper",
+        "elements": 2
+      },
+      {
+        "name": "Pencil",
+        "role": "pencil",
+        "elements": 1
+      }
+    ],
+    "duration": 1400,
+    "trackCount": 1,
+    "planSteps": [
+      "Keep the paper stationary.",
+      "Move the pencil across the paper in a writing motion.",
+      "Rotate the pencil slightly while writing.",
+      "Return the pencil to its original position."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 350,
+        "rotation": -7.555555555555555,
+        "x": 4,
+        "y": 2.4,
+        "scaleX": 1
+      },
+      {
+        "time": 1400,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      }
+    ],
+    "result": "Pass"
+  },
+  {
+    "icon": "tabler:bell",
+    "prompt": "Make the bell swing from side to side while the clapper moves independently.",
+    "components": [
+      {
+        "name": "Bell",
+        "role": "bell",
+        "elements": 1
+      },
+      {
+        "name": "Clapper",
+        "role": "clapper",
+        "elements": 1
+      }
+    ],
+    "duration": 1600,
+    "trackCount": 2,
+    "planSteps": [
+      "Swing the bell left and right around its top pivot.",
+      "Move the clapper independently with opposing timing.",
+      "Gradually settle the motion."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 240,
+        "rotation": -18,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 480,
+        "rotation": 18,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 1600,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      }
+    ],
+    "result": "Pass"
+  },
+  {
+    "icon": "tabler:lock",
+    "prompt": "Make the padlock unlock by lifting and rotating the shackle.",
+    "components": [
+      {
+        "name": "Body",
+        "role": "body",
+        "elements": 2
+      },
+      {
+        "name": "Shackle",
+        "role": "shackle",
+        "elements": 1
+      }
+    ],
+    "duration": 1100,
+    "trackCount": 1,
+    "planSteps": [
+      "Keep the lock body stationary.",
+      "Lift the shackle upward.",
+      "Rotate the shackle around its connection point.",
+      "Settle in the unlocked pose."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 700,
+        "rotation": -29.350464876033058,
+        "x": 0,
+        "y": -5,
+        "scaleX": 1
+      },
+      {
+        "time": 1100,
+        "rotation": -40,
+        "x": 0,
+        "y": -5,
+        "scaleX": 1
+      }
+    ],
+    "result": "Pass"
+  },
+  {
+    "icon": "tabler:mail",
+    "prompt": "Open the envelope flap and have a letter slide out.",
+    "components": [
+      {
+        "name": "Envelope",
+        "role": "body",
+        "elements": 1
+      },
+      {
+        "name": "Flap",
+        "role": "flap",
+        "elements": 1
+      },
+      {
+        "name": "Letter",
+        "role": "letter",
+        "elements": 1
+      }
+    ],
+    "duration": 1400,
+    "trackCount": 2,
+    "planSteps": [
+      "Keep the envelope body stationary.",
+      "Open the envelope flap.",
+      "Slide the letter upward out of the envelope."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 500,
+        "rotation": -160,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 1400,
+        "rotation": -160,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      }
+    ],
+    "result": "Pass"
+  },
+  {
+    "icon": "tabler:download",
+    "prompt": "Make the arrow move downward into the tray, then settle.",
+    "components": [
+      {
+        "name": "Tray",
+        "role": "tray",
+        "elements": 1
+      },
+      {
+        "name": "Arrow",
+        "role": "arrow",
+        "elements": 2
+      }
+    ],
+    "duration": 1000,
+    "trackCount": 2,
+    "planSteps": [
+      "Keep the tray stationary.",
+      "Move the arrow downward into the tray.",
+      "Settle the arrow."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 700,
+        "rotation": 0,
+        "x": 0,
+        "y": 6,
+        "scaleX": 1
+      },
+      {
+        "time": 1000,
+        "rotation": 0,
+        "x": 0,
+        "y": 5,
+        "scaleX": 1
+      }
+    ],
+    "result": "Pass"
+  },
+  {
+    "icon": "tabler:search",
+    "prompt": "Move the magnifying glass around as if searching, then return it to its original position.",
+    "components": [
+      {
+        "name": "Magnifier",
+        "role": "glass",
+        "elements": 2
+      }
+    ],
+    "duration": 1400,
+    "trackCount": 2,
+    "planSteps": [
+      "Move the magnifying glass along a searching path.",
+      "Return to the original position."
+    ],
+    "frames": [
+      {
+        "time": 0,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      },
+      {
+        "time": 350,
+        "rotation": 0,
+        "x": 3,
+        "y": -2,
+        "scaleX": 1
+      },
+      {
+        "time": 1400,
+        "rotation": 0,
+        "x": 0,
+        "y": 0,
+        "scaleX": 1
+      }
+    ],
+    "result": "Pass"
+  }
+]
