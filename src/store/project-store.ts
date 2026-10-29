@@ -31,22 +31,23 @@ import {
 } from "@/lib/ai/rules-engine";
 import { saveProject } from "@/lib/persistence/db";
 
-export type RightPanelTab = "chat" | "controls";
-export type CanvasBg = "stripes" | "transparent" | "white";
+export type CanvasBg = "canvas" | "white" | "transparent";
 
 export interface UiState {
   leftOpen: boolean;
   rightOpen: boolean;
-  rightTab: RightPanelTab;
+  timelineOpen: boolean;
   timelineHeight: number;
   selectedComponentIds: string[];
   selectedElementIds: string[];
   selectedKeyframeId: string | null;
   currentTime: number;
   playing: boolean;
+  zoom: number;
   canvasBg: CanvasBg;
   exportOpen: boolean;
   readyToGenerate: boolean;
+  generating: boolean;
 }
 
 export const ICON_SIZE_MIN = 16;
@@ -58,8 +59,9 @@ interface Store {
   ui: UiState;
   setLeftOpen: (v: boolean) => void;
   setRightOpen: (v: boolean) => void;
-  setRightTab: (tab: RightPanelTab) => void;
+  setTimelineOpen: (v: boolean) => void;
   setTimelineHeight: (h: number) => void;
+  setZoom: (z: number) => void;
   setCanvasBg: (bg: CanvasBg) => void;
   setExportOpen: (v: boolean) => void;
   setCurrentTime: (t: number) => void;
@@ -135,16 +137,18 @@ function pushHistory(
 const defaultUi: UiState = {
   leftOpen: true,
   rightOpen: true,
-  rightTab: "chat",
-  timelineHeight: 180,
+  timelineOpen: false,
+  timelineHeight: 200,
   selectedComponentIds: [],
   selectedElementIds: [],
   selectedKeyframeId: null,
   currentTime: 0,
   playing: false,
-  canvasBg: "stripes",
+  zoom: 1,
+  canvasBg: "canvas",
   exportOpen: false,
   readyToGenerate: false,
+  generating: false,
 };
 
 export const useProjectStore = create<Store>((set, get) => ({
@@ -153,9 +157,11 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   setLeftOpen: (v) => set((s) => ({ ui: { ...s.ui, leftOpen: v } })),
   setRightOpen: (v) => set((s) => ({ ui: { ...s.ui, rightOpen: v } })),
-  setRightTab: (tab) => set((s) => ({ ui: { ...s.ui, rightTab: tab, rightOpen: true } })),
+  setTimelineOpen: (v) => set((s) => ({ ui: { ...s.ui, timelineOpen: v } })),
   setTimelineHeight: (h) =>
-    set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(360, Math.max(120, h)) } })),
+    set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(360, Math.max(140, h)) } })),
+  setZoom: (z) =>
+    set((s) => ({ ui: { ...s.ui, zoom: Math.min(3, Math.max(0.5, Number(z.toFixed(2)))) } })),
   setCanvasBg: (bg) => set((s) => ({ ui: { ...s.ui, canvasBg: bg } })),
   setExportOpen: (v) => set((s) => ({ ui: { ...s.ui, exportOpen: v } })),
   setCurrentTime: (t) => set((s) => ({ ui: { ...s.ui, currentTime: t } })),
@@ -198,8 +204,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         currentTime: 0,
         playing: false,
         readyToGenerate: false,
-        rightTab: "chat",
-        rightOpen: true,
+        timelineOpen: false,
       },
     }));
   },
@@ -341,8 +346,8 @@ export const useProjectStore = create<Store>((set, get) => ({
         currentTime: 0,
         playing: true,
         readyToGenerate: false,
-        rightTab: "chat",
-        rightOpen: true,
+        generating: false,
+        timelineOpen: true,
       },
     });
   },
@@ -459,7 +464,12 @@ export const useProjectStore = create<Store>((set, get) => ({
           Math.max(ICON_SIZE_MIN, project.iconSize || ICON_SIZE_DEFAULT),
         ),
       },
-      ui: { ...defaultUi, leftOpen: true, rightOpen: true, rightTab: "chat" },
+      ui: {
+        ...defaultUi,
+        leftOpen: true,
+        rightOpen: true,
+        timelineOpen: !!project.animation,
+      },
     }),
 
   newProject: () => set({ project: freshProject(), ui: { ...defaultUi } }),

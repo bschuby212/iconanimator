@@ -2,17 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import {
+  ChevronUp,
   Download,
-  FolderOpen,
-  MessageSquare,
+  MoreHorizontal,
   PanelLeft,
-  PanelRight,
-  Save,
-  SlidersHorizontal,
+  Redo2,
+  Undo2,
 } from "lucide-react";
 import { IconBrowser } from "@/components/library/IconBrowser";
 import { AnimationCanvas } from "@/components/canvas/AnimationCanvas";
-import { RightSidebar } from "@/components/layout/RightSidebar";
+import { AiPromptBar } from "@/components/ai/AiPromptBar";
+import { Inspector } from "@/components/inspector/Inspector";
 import { Timeline } from "@/components/layout/Timeline";
 import { ExportDialog } from "@/components/export/ExportDialog";
 import { Button } from "@/components/ui/button";
@@ -25,25 +25,24 @@ export function AppShell() {
   const project = useProjectStore((s) => s.project);
   const setLeftOpen = useProjectStore((s) => s.setLeftOpen);
   const setRightOpen = useProjectStore((s) => s.setRightOpen);
-  const setRightTab = useProjectStore((s) => s.setRightTab);
+  const setTimelineOpen = useProjectStore((s) => s.setTimelineOpen);
   const setTimelineHeight = useProjectStore((s) => s.setTimelineHeight);
   const setExportOpen = useProjectStore((s) => s.setExportOpen);
   const persist = useProjectStore((s) => s.persist);
   const loadProjectState = useProjectStore((s) => s.loadProjectState);
   const newProject = useProjectStore((s) => s.newProject);
+  const undo = useProjectStore((s) => s.undo);
+  const redo = useProjectStore((s) => s.redo);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
 
+  // Autosave
   useEffect(() => {
-    const sync = () => {
-      if (typeof window === "undefined") return;
-      if (window.innerWidth < 768) {
-        setLeftOpen(false);
-      }
-    };
-    sync();
-    window.addEventListener("resize", sync);
-    return () => window.removeEventListener("resize", sync);
-  }, [setLeftOpen]);
+    if (!project.icon) return;
+    const t = window.setTimeout(() => {
+      void persist();
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [project, persist]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -62,156 +61,192 @@ export function AppShell() {
     };
   }, [setTimelineHeight]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if (meta && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
+
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--bg)] text-[var(--text)]">
-      <header className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border)] bg-white px-2 sm:h-12 sm:gap-2 sm:px-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-xs font-bold text-white">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-white px-3">
+        <button
+          type="button"
+          className="rounded-md p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-black/[0.04] hover:text-[var(--text)] md:hidden"
+          onClick={() => setLeftOpen(!ui.leftOpen)}
+          aria-label="Toggle library"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[10px] font-bold text-white">
             Ai
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold leading-none tracking-tight">
-              Icon Animator
-            </p>
-            <p className="truncate text-[10px] text-[var(--text-secondary)]">
-              {project.name}
-            </p>
-          </div>
+          <input
+            className="min-w-0 truncate border-0 bg-transparent text-sm font-medium outline-none placeholder:text-[var(--text-secondary)]"
+            value={project.name}
+            onChange={(e) =>
+              useProjectStore.setState((s) => ({
+                project: { ...s.project, name: e.target.value },
+              }))
+            }
+            aria-label="Project name"
+          />
         </div>
-        <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setLeftOpen(!ui.leftOpen)} title="Icons">
-            <PanelLeft className="h-4 w-4" />
+
+        <div className="ml-auto flex items-center gap-0.5">
+          <Button size="icon" variant="ghost" onClick={undo} title="Undo" className="h-8 w-8">
+            <Undo2 className="h-3.5 w-3.5" />
           </Button>
-          <Button
-            size="sm"
-            variant={ui.rightOpen && ui.rightTab === "chat" ? "secondary" : "ghost"}
-            onClick={() => {
-              if (ui.rightOpen && ui.rightTab === "chat") setRightOpen(false);
-              else setRightTab("chat");
-            }}
-            title="Chat"
-          >
-            <MessageSquare className="h-4 w-4" />
+          <Button size="icon" variant="ghost" onClick={redo} title="Redo" className="h-8 w-8">
+            <Redo2 className="h-3.5 w-3.5" />
           </Button>
-          <Button
-            size="sm"
-            variant={ui.rightOpen && ui.rightTab === "controls" ? "secondary" : "ghost"}
-            onClick={() => {
-              if (ui.rightOpen && ui.rightTab === "controls") setRightOpen(false);
-              else setRightTab("controls");
-            }}
-            title="Controls"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </Button>
-          <Button size="sm" variant="ghost" className="hidden sm:inline-flex" onClick={() => setRightOpen(!ui.rightOpen)}>
-            <PanelRight className="h-4 w-4" />
-          </Button>
-          <Button size="sm" variant="ghost" className="hidden sm:inline-flex" onClick={() => newProject()}>
-            New
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="hidden md:inline-flex"
-            onClick={async () => {
-              await persist();
-            }}
-          >
-            <Save className="h-3.5 w-3.5" />
-            Save
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="hidden lg:inline-flex"
-            onClick={async () => {
-              const projects = await listProjects();
-              if (!projects.length) {
-                alert("No saved projects yet.");
-                return;
-              }
-              const id = window.prompt(
-                `Open project id:\n${projects.map((p) => `${p.id} — ${p.name}`).join("\n")}`,
-                projects[0].id,
-              );
-              if (!id) return;
-              const loaded = await loadProject(id);
-              if (loaded) loadProjectState(loaded);
-            }}
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            Open
-          </Button>
+          <div className="relative">
+            <details className="group">
+              <summary className="list-none cursor-pointer rounded-md p-1.5 text-[var(--text-secondary)] hover:bg-black/[0.04] hover:text-[var(--text)] [&::-webkit-details-marker]:hidden">
+                <MoreHorizontal className="h-4 w-4" />
+              </summary>
+              <div className="absolute right-0 z-30 mt-1 w-40 rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg">
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
+                  onClick={() => newProject()}
+                >
+                  New project
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
+                  onClick={() => void persist()}
+                >
+                  Save now
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
+                  onClick={async () => {
+                    const projects = await listProjects();
+                    if (!projects.length) {
+                      alert("No saved projects yet.");
+                      return;
+                    }
+                    const id = window.prompt(
+                      `Open project:\n${projects.map((p) => `${p.id} — ${p.name}`).join("\n")}`,
+                      projects[0].id,
+                    );
+                    if (!id) return;
+                    const loaded = await loadProject(id);
+                    if (loaded) loadProjectState(loaded);
+                  }}
+                >
+                  Open…
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
+                  onClick={() => setRightOpen(!ui.rightOpen)}
+                >
+                  {ui.rightOpen ? "Hide inspector" : "Show inspector"}
+                </button>
+                <button
+                  type="button"
+                  className="hidden w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)] md:block"
+                  onClick={() => setLeftOpen(!ui.leftOpen)}
+                >
+                  {ui.leftOpen ? "Hide library" : "Show library"}
+                </button>
+              </div>
+            </details>
+          </div>
           <Button
             size="sm"
             variant="primary"
+            className="ml-1"
             disabled={!project.animation}
             onClick={() => setExportOpen(true)}
           >
             <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Export</span>
+            Export
           </Button>
         </div>
       </header>
 
       <div className="relative flex min-h-0 flex-1">
-        {ui.leftOpen && (
-          <aside
-            className={cn(
-              "z-20 flex h-full w-[min(280px,85vw)] shrink-0 flex-col border-r border-[var(--border)] bg-white",
-              "max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:shadow-lg",
-            )}
-          >
-            <IconBrowser />
-          </aside>
-        )}
+        <aside
+          className={cn(
+            "z-20 flex h-full w-[240px] shrink-0 flex-col border-r border-[var(--border)] bg-white transition-transform",
+            "max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:w-[min(260px,88vw)] max-md:shadow-xl",
+            ui.leftOpen ? "translate-x-0" : "max-md:-translate-x-full md:hidden",
+          )}
+        >
+          <IconBrowser />
+        </aside>
         {ui.leftOpen && (
           <button
             type="button"
             className="absolute inset-0 z-10 bg-black/20 md:hidden"
-            aria-label="Close icons"
+            aria-label="Close library"
             onClick={() => setLeftOpen(false)}
           />
         )}
 
-        <main className="flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
+        <main className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
             <AnimationCanvas />
           </div>
+          <AiPromptBar />
         </main>
 
-        {ui.rightOpen && (
-          <aside
-            className={cn(
-              "z-20 flex h-full w-[min(320px,90vw)] shrink-0 flex-col border-l border-[var(--border)] bg-white",
-              "max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:shadow-lg",
-            )}
-          >
-            <RightSidebar />
-          </aside>
-        )}
-        {ui.rightOpen && (
-          <button
-            type="button"
-            className="absolute inset-0 z-10 bg-black/20 md:hidden"
-            aria-label="Close panel"
-            onClick={() => setRightOpen(false)}
-          />
-        )}
+        <aside
+          className={cn(
+            "z-20 flex h-full w-[280px] shrink-0 flex-col border-l border-[var(--border)] bg-white",
+            "max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:w-[min(300px,90vw)] max-md:shadow-xl",
+            ui.rightOpen ? "translate-x-0" : "max-md:translate-x-full md:hidden",
+          )}
+        >
+          <Inspector />
+        </aside>
       </div>
 
-      <div
-        className="h-1 shrink-0 cursor-row-resize bg-[var(--border)] hover:bg-[var(--accent)]"
-        onMouseDown={(e) => {
-          drag.current = { startY: e.clientY, startH: ui.timelineHeight };
-        }}
-      />
-      <div
-        className="shrink-0 border-t border-[var(--border)]"
-        style={{ height: ui.timelineHeight }}
-      >
-        <Timeline />
+      {/* Timeline toggle + panel */}
+      <div className="shrink-0 border-t border-[var(--border)] bg-white">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg)] hover:text-[var(--text)]"
+          onClick={() => setTimelineOpen(!ui.timelineOpen)}
+          data-testid="timeline-toggle"
+        >
+          <span className="font-medium">Timeline</span>
+          <ChevronUp
+            className={cn(
+              "h-3.5 w-3.5 transition-transform",
+              !ui.timelineOpen && "rotate-180",
+            )}
+          />
+        </button>
+        {ui.timelineOpen && (
+          <>
+            <div
+              className="h-1 cursor-row-resize bg-[var(--border)] hover:bg-[var(--accent)]"
+              onMouseDown={(e) => {
+                drag.current = { startY: e.clientY, startH: ui.timelineHeight };
+              }}
+            />
+            <div style={{ height: ui.timelineHeight }}>
+              <Timeline />
+            </div>
+          </>
+        )}
       </div>
 
       <ExportDialog />
