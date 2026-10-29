@@ -31,32 +31,40 @@ import {
 } from "@/lib/ai/rules-engine";
 import { saveProject } from "@/lib/persistence/db";
 
+export type RightPanelTab = "chat" | "controls";
+export type CanvasBg = "stripes" | "transparent" | "white";
+
 export interface UiState {
   leftOpen: boolean;
   rightOpen: boolean;
+  rightTab: RightPanelTab;
   timelineHeight: number;
   selectedComponentIds: string[];
   selectedElementIds: string[];
   selectedKeyframeId: string | null;
   currentTime: number;
   playing: boolean;
-  zoom: number;
-  canvasBg: "transparent" | "checkerboard" | string;
+  canvasBg: CanvasBg;
   exportOpen: boolean;
   readyToGenerate: boolean;
 }
+
+export const ICON_SIZE_MIN = 16;
+export const ICON_SIZE_DEFAULT = 32;
+export const ICON_SIZE_MAX = 64;
 
 interface Store {
   project: ProjectState;
   ui: UiState;
   setLeftOpen: (v: boolean) => void;
   setRightOpen: (v: boolean) => void;
+  setRightTab: (tab: RightPanelTab) => void;
   setTimelineHeight: (h: number) => void;
-  setZoom: (z: number) => void;
-  setCanvasBg: (bg: UiState["canvasBg"]) => void;
+  setCanvasBg: (bg: CanvasBg) => void;
   setExportOpen: (v: boolean) => void;
   setCurrentTime: (t: number) => void;
   setPlaying: (p: boolean) => void;
+  setIconSize: (size: number) => void;
   setIntent: (partial: Partial<AnimationIntent>) => void;
   selectIcon: (icon: IconSelection) => void;
   uploadSvg: (svg: string, name?: string) => void;
@@ -104,7 +112,7 @@ function freshProject(): ProjectState {
     conversation: [],
     history: [],
     historyIndex: -1,
-    iconSize: 168,
+    iconSize: ICON_SIZE_DEFAULT,
     strokeWidth: 2,
     strokeColor: "#171717",
     fillColor: "none",
@@ -127,14 +135,14 @@ function pushHistory(
 const defaultUi: UiState = {
   leftOpen: true,
   rightOpen: true,
-  timelineHeight: 220,
+  rightTab: "chat",
+  timelineHeight: 180,
   selectedComponentIds: [],
   selectedElementIds: [],
   selectedKeyframeId: null,
   currentTime: 0,
   playing: false,
-  zoom: 1,
-  canvasBg: "checkerboard",
+  canvasBg: "stripes",
   exportOpen: false,
   readyToGenerate: false,
 };
@@ -145,13 +153,20 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   setLeftOpen: (v) => set((s) => ({ ui: { ...s.ui, leftOpen: v } })),
   setRightOpen: (v) => set((s) => ({ ui: { ...s.ui, rightOpen: v } })),
+  setRightTab: (tab) => set((s) => ({ ui: { ...s.ui, rightTab: tab, rightOpen: true } })),
   setTimelineHeight: (h) =>
-    set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(420, Math.max(140, h)) } })),
-  setZoom: (z) => set((s) => ({ ui: { ...s.ui, zoom: z } })),
+    set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(360, Math.max(120, h)) } })),
   setCanvasBg: (bg) => set((s) => ({ ui: { ...s.ui, canvasBg: bg } })),
   setExportOpen: (v) => set((s) => ({ ui: { ...s.ui, exportOpen: v } })),
   setCurrentTime: (t) => set((s) => ({ ui: { ...s.ui, currentTime: t } })),
   setPlaying: (p) => set((s) => ({ ui: { ...s.ui, playing: p } })),
+  setIconSize: (size) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        iconSize: Math.min(ICON_SIZE_MAX, Math.max(ICON_SIZE_MIN, Math.round(size))),
+      },
+    })),
 
   setIntent: (partial) =>
     set((s) => ({
@@ -183,6 +198,8 @@ export const useProjectStore = create<Store>((set, get) => ({
         currentTime: 0,
         playing: false,
         readyToGenerate: false,
+        rightTab: "chat",
+        rightOpen: true,
       },
     }));
   },
@@ -318,14 +335,14 @@ export const useProjectStore = create<Store>((set, get) => ({
         ...hist,
         parsed,
         components,
-        iconSize: Math.max(project.iconSize, 168),
       },
       ui: {
         ...ui,
         currentTime: 0,
         playing: true,
         readyToGenerate: false,
-        zoom: Math.max(ui.zoom, 1.5),
+        rightTab: "chat",
+        rightOpen: true,
       },
     });
   },
@@ -434,7 +451,16 @@ export const useProjectStore = create<Store>((set, get) => ({
   },
 
   loadProjectState: (project) =>
-    set({ project, ui: { ...defaultUi, leftOpen: true, rightOpen: true } }),
+    set({
+      project: {
+        ...project,
+        iconSize: Math.min(
+          ICON_SIZE_MAX,
+          Math.max(ICON_SIZE_MIN, project.iconSize || ICON_SIZE_DEFAULT),
+        ),
+      },
+      ui: { ...defaultUi, leftOpen: true, rightOpen: true, rightTab: "chat" },
+    }),
 
   newProject: () => set({ project: freshProject(), ui: { ...defaultUi } }),
 

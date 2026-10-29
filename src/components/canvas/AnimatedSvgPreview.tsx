@@ -110,8 +110,8 @@ export function AnimatedSvgPreview({
       width={size}
       height={size}
       overflow="visible"
-      style={{ color }}
-      className="select-none"
+      style={{ color, overflow: "visible", maxWidth: "none" }}
+      className="block select-none overflow-visible"
       onClick={(e) => {
         const target = e.target as Element;
         const id = target.closest("[data-animator-id]")?.getAttribute("data-animator-id");
