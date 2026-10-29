@@ -86,7 +86,7 @@ export function AiChatPanel() {
             <span
               className={cn(
                 "mr-1.5 font-medium",
-                m.role === "user" ? "text-[var(--text)]" : "text-[var(--accent)]",
+                  m.role === "user" ? "text-black" : "text-[#0b7f6e]",
               )}
             >
               {m.role === "user" ? "You" : "AI"}
@@ -145,7 +145,7 @@ export function AiChatPanel() {
               ? "Refine this animation…"
               : "Describe how you’d like this icon to animate…"
           }
-          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)] focus:bg-white"
+          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors placeholder:text-[var(--text-secondary)] focus:border-[#0f9f8a] focus:bg-white"
           data-testid="ai-prompt"
         />
         {primaryAction === "generate" ? (

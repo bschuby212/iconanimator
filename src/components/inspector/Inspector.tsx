@@ -157,7 +157,7 @@ export function Inspector() {
             className={cn(
               "flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
               ui.selectedComponentIds.includes(c.id)
-                ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
                 : "text-[var(--text)] hover:bg-black/[0.03]",
             )}
           >

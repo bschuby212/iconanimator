@@ -110,7 +110,7 @@ export function Timeline() {
               </span>
             ))}
             <div
-              className="absolute top-0 z-10 h-full w-px bg-[var(--accent)]"
+              className="absolute top-0 z-10 h-full w-px bg-[#0f9f8a]"
               style={{ left: `${(ui.currentTime / duration) * 100}%` }}
             />
           </div>
@@ -126,7 +126,7 @@ export function Timeline() {
                     onMouseDown={(e) => onScrub(e.clientX)}
                   >
                     <div
-                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[var(--accent-soft)]"
+                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#0f9f8a]/20"
                       style={{
                         left: `${((p.keyframes[0]?.time ?? 0) / duration) * 100}%`,
                         width: `${(((p.keyframes.at(-1)?.time ?? 0) - (p.keyframes[0]?.time ?? 0)) / duration) * 100}%`,
@@ -137,8 +137,8 @@ export function Timeline() {
                         key={k.id}
                         title={`${k.time}ms = ${k.value}`}
                         className={cn(
-                          "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-[var(--accent)] bg-white",
-                          ui.selectedKeyframeId === k.id && "bg-[var(--accent)]",
+                          "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-[#0f9f8a] bg-white",
+                          ui.selectedKeyframeId === k.id && "bg-[#0f9f8a]",
                         )}
                         style={{ left: `${(k.time / duration) * 100}%` }}
                         onClick={(e) => {

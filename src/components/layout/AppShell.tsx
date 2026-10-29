@@ -28,6 +28,8 @@ export function AppShell() {
   const persist = useProjectStore((s) => s.persist);
   const loadProjectState = useProjectStore((s) => s.loadProjectState);
   const newProject = useProjectStore((s) => s.newProject);
+  const duplicateProject = useProjectStore((s) => s.duplicateProject);
+  const clearAnimation = useProjectStore((s) => s.clearAnimation);
   const undo = useProjectStore((s) => s.undo);
   const redo = useProjectStore((s) => s.redo);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
@@ -85,7 +87,7 @@ export function AppShell() {
           <PanelLeft className="h-4 w-4" />
         </button>
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent)] text-[10px] font-bold text-white">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#0f9f8a] text-[10px] font-bold text-white">
             Ai
           </div>
           <input
@@ -113,14 +115,33 @@ export function AppShell() {
               <summary className="list-none cursor-pointer rounded-md p-1.5 text-[var(--text-secondary)] hover:bg-black/[0.04] hover:text-[var(--text)] [&::-webkit-details-marker]:hidden">
                 <MoreHorizontal className="h-4 w-4" />
               </summary>
-              <div className="absolute right-0 z-30 mt-1 w-40 rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg">
+              <div className="absolute right-0 z-30 mt-1 w-44 rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg">
+                <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+                  File
+                </p>
                 <button
                   type="button"
                   className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
                   onClick={() => newProject()}
                 >
-                  New project
+                  New file
                 </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
+                  onClick={() => duplicateProject()}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
+                  onClick={() => clearAnimation()}
+                  disabled={!project.icon}
+                >
+                  Clear animation
+                </button>
+                <div className="my-1 border-t border-[var(--border)]" />
                 <button
                   type="button"
                   className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
@@ -148,6 +169,7 @@ export function AppShell() {
                 >
                   Open…
                 </button>
+                <div className="my-1 border-t border-[var(--border)]" />
                 <button
                   type="button"
                   className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"

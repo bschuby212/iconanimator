@@ -106,7 +106,7 @@ export function IconBrowser() {
               className={cn(
                 "flex aspect-square items-center justify-center rounded-lg transition-colors",
                 selectedId === icon.id
-                  ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                  ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
                   : "text-[var(--text)] hover:bg-black/[0.04]",
               )}
             >

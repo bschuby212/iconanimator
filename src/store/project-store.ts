@@ -63,6 +63,8 @@ interface Store {
   setRightTab: (tab: RightTab) => void;
   setTimelineHeight: (h: number) => void;
   restoreCreation: (id: string) => void;
+  duplicateProject: () => void;
+  clearAnimation: () => void;
   setZoom: (z: number) => void;
   setCanvasBg: (bg: CanvasBg) => void;
   setExportOpen: (v: boolean) => void;
@@ -117,6 +119,7 @@ function freshProject(): ProjectState {
     history: [],
     historyIndex: -1,
     creationHistory: [],
+    activeCreationId: null,
     iconSize: ICON_SIZE_DEFAULT,
     strokeWidth: 2,
     strokeColor: "#171717",
@@ -135,6 +138,38 @@ function pushHistory(
     history: trimmed.slice(-30),
     historyIndex: Math.min(trimmed.length - 1, 29),
   };
+}
+
+function upsertCreation(
+  project: ProjectState,
+  patch: Partial<CreationHistoryEntry>,
+): CreationHistoryEntry[] {
+  const list = [...(project.creationHistory ?? [])];
+  const id = project.activeCreationId;
+  if (!id || !project.icon) return list;
+  const idx = list.findIndex((e) => e.id === id);
+  const base: CreationHistoryEntry =
+    idx >= 0
+      ? list[idx]
+      : {
+          id,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          status: "draft",
+          name: project.name,
+          iconName: project.icon.name,
+          prompt: "",
+          icon: project.icon,
+          parsed: project.parsed,
+          components: project.components,
+          plan: null,
+          animation: null,
+          conversation: [],
+        };
+  const next = { ...base, ...patch, updatedAt: Date.now() };
+  if (idx >= 0) list[idx] = next;
+  else list.unshift(next);
+  return list.slice(0, 40);
 }
 
 const defaultUi: UiState = {
@@ -185,6 +220,23 @@ export const useProjectStore = create<Store>((set, get) => ({
   selectIcon: (icon) => {
     const parsed = parseSvg(icon.svg);
     const components = recognizeComponents(parsed, icon.name);
+    const draftId = `gen_${nanoid(8)}`;
+    const now = Date.now();
+    const draft: CreationHistoryEntry = {
+      id: draftId,
+      createdAt: now,
+      updatedAt: now,
+      status: "draft",
+      name: "",
+      iconName: icon.name,
+      prompt: "",
+      icon,
+      parsed,
+      components,
+      plan: null,
+      animation: null,
+      conversation: [],
+    };
     set((s) => ({
       project: {
         ...s.project,
@@ -194,6 +246,8 @@ export const useProjectStore = create<Store>((set, get) => ({
         animation: null,
         plan: null,
         conversation: [],
+        activeCreationId: draftId,
+        creationHistory: [draft, ...(s.project.creationHistory ?? [])].slice(0, 40),
       },
       ui: {
         ...s.ui,
@@ -299,11 +353,20 @@ export const useProjectStore = create<Store>((set, get) => ({
       (!shouldAskClarification(message) || project.conversation.length > 1);
 
     const assistant = createAssistantMessage(reply.message);
+    const conversation = [...project.conversation, userMsg, assistant];
+    const creationHistory = upsertCreation(project, {
+      status: plan ? "planned" : "draft",
+      prompt: message,
+      plan,
+      conversation,
+      updatedAt: Date.now(),
+    });
     set({
       project: {
         ...project,
-        conversation: [...project.conversation, userMsg, assistant],
+        conversation,
         plan,
+        creationHistory,
       },
       ui: { ...ui, readyToGenerate: ready || reply.readyToGenerate },
     });
@@ -339,25 +402,24 @@ export const useProjectStore = create<Store>((set, get) => ({
     };
 
     const hist = pushHistory(project, animation);
-    const entry: CreationHistoryEntry = {
-      id: `gen_${nanoid(8)}`,
-      createdAt: Date.now(),
+    const prompt =
+      lastUser || project.plan.steps.map((s) => s.description).join(" · ");
+    const creationHistory = upsertCreation(project, {
+      status: "complete",
       name: project.name,
-      iconName: project.icon.name,
-      prompt: lastUser || project.plan.steps.map((s) => s.description).join(" · "),
-      icon: project.icon,
-      parsed,
-      components,
+      prompt,
       plan: project.plan,
       animation,
-    };
+      conversation: project.conversation,
+      updatedAt: Date.now(),
+    });
     set({
       project: {
         ...project,
         ...hist,
         parsed,
         components,
-        creationHistory: [entry, ...(project.creationHistory ?? [])].slice(0, 40),
+        creationHistory,
       },
       ui: {
         ...ui,
@@ -374,7 +436,10 @@ export const useProjectStore = create<Store>((set, get) => ({
     const { project, ui } = get();
     const entry = project.creationHistory.find((e) => e.id === id);
     if (!entry) return;
-    const hist = pushHistory(project, entry.animation);
+    const nextAnim = entry.animation;
+    const hist = nextAnim
+      ? pushHistory({ ...project, history: [], historyIndex: -1 }, nextAnim)
+      : { animation: null, history: [], historyIndex: -1 };
     set({
       project: {
         ...project,
@@ -384,16 +449,87 @@ export const useProjectStore = create<Store>((set, get) => ({
         parsed: entry.parsed,
         components: entry.components,
         plan: entry.plan,
-        conversation: [],
+        conversation: entry.conversation ?? [],
+        activeCreationId: entry.id,
       },
       ui: {
         ...ui,
         currentTime: 0,
-        playing: true,
+        playing: !!nextAnim,
         selectedComponentIds: [],
         selectedElementIds: [],
-        rightTab: "inspector",
+        rightTab: nextAnim ? "inspector" : "chat",
         rightOpen: true,
+        readyToGenerate: !!entry.plan && !nextAnim,
+      },
+    });
+  },
+
+  duplicateProject: () => {
+    const { project } = get();
+    if (!project.icon) {
+      get().newProject();
+      return;
+    }
+    const id = `gen_${nanoid(8)}`;
+    const now = Date.now();
+    const copy: CreationHistoryEntry = {
+      id,
+      createdAt: now,
+      updatedAt: now,
+      status: project.animation ? "complete" : project.plan ? "planned" : "draft",
+      name: project.name ? `${project.name} copy` : "",
+      iconName: project.icon.name,
+      prompt:
+        [...project.conversation].reverse().find((m) => m.role === "user")?.content ||
+        "",
+      icon: project.icon,
+      parsed: project.parsed,
+      components: project.components,
+      plan: project.plan,
+      animation: project.animation,
+      conversation: project.conversation,
+    };
+    set({
+      project: {
+        ...project,
+        id: `proj_${nanoid(8)}`,
+        name: copy.name,
+        activeCreationId: id,
+        creationHistory: [copy, ...(project.creationHistory ?? [])].slice(0, 40),
+        history: project.animation ? [project.animation] : [],
+        historyIndex: project.animation ? 0 : -1,
+      },
+    });
+  },
+
+  clearAnimation: () => {
+    const { project, ui } = get();
+    if (!project.icon) return;
+    const creationHistory = upsertCreation(project, {
+      status: "draft",
+      animation: null,
+      plan: null,
+      conversation: [],
+      prompt: "",
+      updatedAt: Date.now(),
+    });
+    set({
+      project: {
+        ...project,
+        animation: null,
+        plan: null,
+        conversation: [],
+        history: [],
+        historyIndex: -1,
+        creationHistory,
+      },
+      ui: {
+        ...ui,
+        currentTime: 0,
+        playing: false,
+        readyToGenerate: false,
+        rightTab: "chat",
       },
     });
   },
@@ -406,14 +542,21 @@ export const useProjectStore = create<Store>((set, get) => ({
     }
     const userMsg = createUserMessage(message);
     const refined = refineAnimation(project.animation, message);
-    // Also update plan if request is plan-like before generation — already have animation
     const assistant = createAssistantMessage("Updated.");
+    const conversation = [...project.conversation, userMsg, assistant];
     const hist = pushHistory(project, refined);
+    const creationHistory = upsertCreation(project, {
+      status: "complete",
+      animation: refined,
+      conversation,
+      prompt: message,
+    });
     set({
       project: {
         ...project,
         ...hist,
-        conversation: [...project.conversation, userMsg, assistant],
+        conversation,
+        creationHistory,
       },
       ui: { ...ui, currentTime: 0, playing: true },
     });
@@ -504,6 +647,7 @@ export const useProjectStore = create<Store>((set, get) => ({
       project: {
         ...project,
         creationHistory: project.creationHistory ?? [],
+        activeCreationId: project.activeCreationId ?? null,
         iconSize: Math.min(
           ICON_SIZE_MAX,
           Math.max(ICON_SIZE_MIN, project.iconSize || ICON_SIZE_DEFAULT),

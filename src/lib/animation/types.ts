@@ -169,9 +169,13 @@ export interface IconSelection {
   keywords?: string[];
 }
 
+export type CreationStatus = "draft" | "planned" | "complete";
+
 export interface CreationHistoryEntry {
   id: string;
   createdAt: number;
+  updatedAt: number;
+  status: CreationStatus;
   name: string;
   iconName: string;
   prompt: string;
@@ -179,7 +183,8 @@ export interface CreationHistoryEntry {
   parsed: ParsedSvg | null;
   components: SvgComponent[];
   plan: AnimationPlan | null;
-  animation: AnimationDocument;
+  animation: AnimationDocument | null;
+  conversation: ChatMessage[];
 }
 
 export interface ProjectState {
@@ -197,6 +202,7 @@ export interface ProjectState {
   history: AnimationDocument[];
   historyIndex: number;
   creationHistory: CreationHistoryEntry[];
+  activeCreationId: string | null;
   iconSize: number;
   strokeWidth: number;
   strokeColor: string;
