@@ -110,41 +110,6 @@ export async function searchIcons(
     const col = await loadCollection(lib.id);
     if (!col?.icons) continue;
 
-    const names = Object.keys(col.icons);
-    for (const name of names) {
-      if (q && !name.includes(q) && !(col.aliases && name in (col as unknown as object))) {
-        // also match keywords-ish by hyphen parts
-        const parts = name.split("-");
-        if (!parts.some((p) => p.startsWith(q) || q.includes(p))) {
-          if (q.length >= 2 && !name.includes(q)) continue;
-          if (q.length < 2) {
-            // browse mode — take a sample later
-          } else continue;
-        }
-      }
-      if (!q) {
-        // In browse mode skip most; handled below
-      }
-
-      const data = getIconData(col, name);
-      if (!data) continue;
-      const rendered = iconToSVG(data, { height: "auto" });
-      const vb = rendered.attributes.viewBox || "0 0 24 24";
-      const svg = bodyToSvg(rendered.body, vb);
-      results.push({
-        id: `${lib.id}:${name}`,
-        name,
-        library: lib.id,
-        libraryName: lib.name,
-        svg,
-        keywords: name.split("-"),
-      });
-      if (results.length >= limit) return results;
-    }
-  }
-
-  // Browse without query: return popular starter set
-  if (!q && results.length === 0) {
     const starters = [
       "settings",
       "trash",
@@ -167,9 +132,9 @@ export async function searchIcons(
       "folder",
       "camera",
     ];
-    for (const lib of libs) {
-      const col = await loadCollection(lib.id);
-      if (!col) continue;
+
+    // Browse without query: curated starter set first
+    if (!q) {
       for (const name of starters) {
         const data = getIconData(col, name);
         if (!data) continue;
@@ -185,7 +150,51 @@ export async function searchIcons(
           ),
           keywords: name.split("-"),
         });
+        if (results.length >= limit) return results;
       }
+      continue;
+    }
+
+    const names = Object.keys(col.icons);
+    const scored: { name: string; score: number }[] = [];
+    for (const name of names) {
+      if (name === q) {
+        scored.push({ name, score: 100 });
+        continue;
+      }
+      if (name.startsWith(q)) {
+        scored.push({ name, score: 80 });
+        continue;
+      }
+      if (name.includes(q)) {
+        scored.push({ name, score: 60 });
+        continue;
+      }
+      const parts = name.split("-");
+      if (parts.some((p) => p === q)) {
+        scored.push({ name, score: 70 });
+        continue;
+      }
+      if (q.length >= 3 && parts.some((p) => p.startsWith(q))) {
+        scored.push({ name, score: 40 });
+      }
+    }
+    scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    for (const { name } of scored) {
+      const data = getIconData(col, name);
+      if (!data) continue;
+      const rendered = iconToSVG(data, { height: "auto" });
+      const vb = rendered.attributes.viewBox || "0 0 24 24";
+      const svg = bodyToSvg(rendered.body, vb);
+      results.push({
+        id: `${lib.id}:${name}`,
+        name,
+        library: lib.id,
+        libraryName: lib.name,
+        svg,
+        keywords: name.split("-"),
+      });
+      if (results.length >= limit) return results;
     }
   }
 

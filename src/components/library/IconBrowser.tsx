@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useEffect, useState, useTransition } from "react";
 import { Heart, Search, Upload } from "lucide-react";
-import { LIBRARIES, searchIcons, type IconRecord, type LibraryId } from "@/lib/icons/libraries";
+import { LIBRARIES, type IconRecord, type LibraryId } from "@/lib/icons/libraries";
 import { useProjectStore } from "@/store/project-store";
 import { cn } from "@/lib/utils/cn";
 import { addFavorite, addRecent, listFavorites } from "@/lib/persistence/db";
@@ -15,18 +15,35 @@ export function IconBrowser() {
   const [library, setLibrary] = useState<LibraryId | "all">("tabler");
   const [icons, setIcons] = useState<IconRecord[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [pendingHint, setPendingHint] = useState(false);
   const [tab, setTab] = useState<"browse" | "favorites" | "recent">("browse");
 
   useEffect(() => {
-    let cancelled = false;
-    startTransition(() => {
-      searchIcons(deferredQuery, library, 100).then((res) => {
-        if (!cancelled) setIcons(res);
-      });
+    let active = true;
+    const params = new URLSearchParams({
+      q: deferredQuery,
+      library,
+      limit: "100",
     });
+    const url = `/api/icons/search?${params.toString()}`;
+    startTransition(() => {
+      setPendingHint(true);
+    });
+    fetch(url, { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: { icons?: IconRecord[] }) => {
+        if (!active) return;
+        setIcons(data.icons ?? []);
+      })
+      .catch(() => {
+        if (active) setIcons([]);
+      })
+      .finally(() => {
+        if (active) setPendingHint(false);
+      });
     return () => {
-      cancelled = true;
+      active = false;
     };
   }, [deferredQuery, library]);
 
@@ -117,7 +134,7 @@ export function IconBrowser() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        {pending && (
+        {pendingHint && (
           <p className="px-1 pb-2 text-xs text-[var(--text-secondary)]">Searching…</p>
         )}
         <div className="grid grid-cols-4 gap-1.5">
