@@ -58,13 +58,6 @@ export function Timeline() {
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
-        <h2 className="text-xs font-semibold">Timeline</h2>
-        <span className="text-[10px] text-[var(--text-secondary)]">
-          {rows.length} layers · {duration} ms
-        </span>
-      </div>
-
       <div className="flex min-h-0 flex-1 overflow-auto">
         <div className="w-28 shrink-0 border-r border-[var(--border)] sm:w-36">
           {rows.map((row) => {

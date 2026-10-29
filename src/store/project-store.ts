@@ -7,9 +7,8 @@ import {
   type AnimationDocument,
   type AnimationIntent,
   type AnimationPlan,
-  type ChatMessage,
+  type CreationHistoryEntry,
   type IconSelection,
-  type ParsedSvg,
   type ProjectState,
   type SvgComponent,
 } from "@/lib/animation/types";
@@ -33,13 +32,12 @@ import { saveProject } from "@/lib/persistence/db";
 
 export type CanvasBg = "canvas" | "white" | "transparent";
 
-export type RightTab = "chat" | "inspector";
+export type RightTab = "chat" | "inspector" | "history";
 
 export interface UiState {
   leftOpen: boolean;
   rightOpen: boolean;
   rightTab: RightTab;
-  timelineOpen: boolean;
   timelineHeight: number;
   selectedComponentIds: string[];
   selectedElementIds: string[];
@@ -63,8 +61,8 @@ interface Store {
   setLeftOpen: (v: boolean) => void;
   setRightOpen: (v: boolean) => void;
   setRightTab: (tab: RightTab) => void;
-  setTimelineOpen: (v: boolean) => void;
   setTimelineHeight: (h: number) => void;
+  restoreCreation: (id: string) => void;
   setZoom: (z: number) => void;
   setCanvasBg: (bg: CanvasBg) => void;
   setExportOpen: (v: boolean) => void;
@@ -106,7 +104,7 @@ interface Store {
 function freshProject(): ProjectState {
   return {
     id: `proj_${nanoid(8)}`,
-    name: "Untitled animation",
+    name: "",
     createdAt: Date.now(),
     updatedAt: Date.now(),
     icon: null,
@@ -118,6 +116,7 @@ function freshProject(): ProjectState {
     conversation: [],
     history: [],
     historyIndex: -1,
+    creationHistory: [],
     iconSize: ICON_SIZE_DEFAULT,
     strokeWidth: 2,
     strokeColor: "#171717",
@@ -142,7 +141,6 @@ const defaultUi: UiState = {
   leftOpen: true,
   rightOpen: true,
   rightTab: "chat",
-  timelineOpen: false,
   timelineHeight: 220,
   selectedComponentIds: [],
   selectedElementIds: [],
@@ -163,7 +161,6 @@ export const useProjectStore = create<Store>((set, get) => ({
   setLeftOpen: (v) => set((s) => ({ ui: { ...s.ui, leftOpen: v } })),
   setRightOpen: (v) => set((s) => ({ ui: { ...s.ui, rightOpen: v } })),
   setRightTab: (tab) => set((s) => ({ ui: { ...s.ui, rightTab: tab } })),
-  setTimelineOpen: (v) => set((s) => ({ ui: { ...s.ui, timelineOpen: v } })),
   setTimelineHeight: (h) =>
     set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(420, Math.max(160, h)) } })),
   setZoom: (z) =>
@@ -197,7 +194,6 @@ export const useProjectStore = create<Store>((set, get) => ({
         animation: null,
         plan: null,
         conversation: [],
-        name: `${icon.name} animation`,
       },
       ui: {
         ...s.ui,
@@ -206,7 +202,6 @@ export const useProjectStore = create<Store>((set, get) => ({
         currentTime: 0,
         playing: false,
         readyToGenerate: false,
-        timelineOpen: false,
         rightTab: "chat",
         rightOpen: true,
       },
@@ -344,12 +339,25 @@ export const useProjectStore = create<Store>((set, get) => ({
     };
 
     const hist = pushHistory(project, animation);
+    const entry: CreationHistoryEntry = {
+      id: `gen_${nanoid(8)}`,
+      createdAt: Date.now(),
+      name: project.name,
+      iconName: project.icon.name,
+      prompt: lastUser || project.plan.steps.map((s) => s.description).join(" · "),
+      icon: project.icon,
+      parsed,
+      components,
+      plan: project.plan,
+      animation,
+    };
     set({
       project: {
         ...project,
         ...hist,
         parsed,
         components,
+        creationHistory: [entry, ...(project.creationHistory ?? [])].slice(0, 40),
       },
       ui: {
         ...ui,
@@ -357,8 +365,35 @@ export const useProjectStore = create<Store>((set, get) => ({
         playing: true,
         readyToGenerate: false,
         generating: false,
-        timelineOpen: true,
         rightTab: "inspector",
+      },
+    });
+  },
+
+  restoreCreation: (id) => {
+    const { project, ui } = get();
+    const entry = project.creationHistory.find((e) => e.id === id);
+    if (!entry) return;
+    const hist = pushHistory(project, entry.animation);
+    set({
+      project: {
+        ...project,
+        ...hist,
+        name: entry.name,
+        icon: entry.icon,
+        parsed: entry.parsed,
+        components: entry.components,
+        plan: entry.plan,
+        conversation: [],
+      },
+      ui: {
+        ...ui,
+        currentTime: 0,
+        playing: true,
+        selectedComponentIds: [],
+        selectedElementIds: [],
+        rightTab: "inspector",
+        rightOpen: true,
       },
     });
   },
@@ -468,6 +503,7 @@ export const useProjectStore = create<Store>((set, get) => ({
     set({
       project: {
         ...project,
+        creationHistory: project.creationHistory ?? [],
         iconSize: Math.min(
           ICON_SIZE_MAX,
           Math.max(ICON_SIZE_MIN, project.iconSize || ICON_SIZE_DEFAULT),
@@ -477,7 +513,6 @@ export const useProjectStore = create<Store>((set, get) => ({
         ...defaultUi,
         leftOpen: true,
         rightOpen: true,
-        timelineOpen: !!project.animation,
       },
     }),
 

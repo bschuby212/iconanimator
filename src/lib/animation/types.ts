@@ -169,6 +169,19 @@ export interface IconSelection {
   keywords?: string[];
 }
 
+export interface CreationHistoryEntry {
+  id: string;
+  createdAt: number;
+  name: string;
+  iconName: string;
+  prompt: string;
+  icon: IconSelection;
+  parsed: ParsedSvg | null;
+  components: SvgComponent[];
+  plan: AnimationPlan | null;
+  animation: AnimationDocument;
+}
+
 export interface ProjectState {
   id: string;
   name: string;
@@ -183,6 +196,7 @@ export interface ProjectState {
   conversation: ChatMessage[];
   history: AnimationDocument[];
   historyIndex: number;
+  creationHistory: CreationHistoryEntry[];
   iconSize: number;
   strokeWidth: number;
   strokeColor: string;

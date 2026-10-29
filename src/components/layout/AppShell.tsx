@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import {
-  ChevronUp,
   Download,
   MoreHorizontal,
   PanelLeft,
@@ -24,7 +23,6 @@ export function AppShell() {
   const project = useProjectStore((s) => s.project);
   const setLeftOpen = useProjectStore((s) => s.setLeftOpen);
   const setRightOpen = useProjectStore((s) => s.setRightOpen);
-  const setTimelineOpen = useProjectStore((s) => s.setTimelineOpen);
   const setTimelineHeight = useProjectStore((s) => s.setTimelineHeight);
   const setExportOpen = useProjectStore((s) => s.setExportOpen);
   const persist = useProjectStore((s) => s.persist);
@@ -93,6 +91,7 @@ export function AppShell() {
           <input
             className="min-w-0 truncate border-0 bg-transparent text-sm font-medium outline-none placeholder:text-[var(--text-secondary)]"
             value={project.name}
+            placeholder="Untitled animation"
             onChange={(e) =>
               useProjectStore.setState((s) => ({
                 project: { ...s.project, name: e.target.value },
@@ -139,7 +138,7 @@ export function AppShell() {
                       return;
                     }
                     const id = window.prompt(
-                      `Open project:\n${projects.map((p) => `${p.id} — ${p.name}`).join("\n")}`,
+                      `Open project:\n${projects.map((p) => `${p.id} — ${p.name || "Untitled"}`).join("\n")}`,
                       projects[0].id,
                     );
                     if (!id) return;
@@ -216,40 +215,16 @@ export function AppShell() {
       </div>
 
       <div className="shrink-0 border-t border-[var(--border)] bg-white">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg)] hover:text-[var(--text)]"
-          onClick={() => setTimelineOpen(!ui.timelineOpen)}
-          data-testid="timeline-toggle"
-        >
-          <span className="font-medium">
-            Timeline
-            {project.animation ? (
-              <span className="ml-2 font-normal text-[var(--text-secondary)]">
-                · edit keyframes
-              </span>
-            ) : null}
-          </span>
-          <ChevronUp
-            className={cn(
-              "h-3.5 w-3.5 transition-transform",
-              !ui.timelineOpen && "rotate-180",
-            )}
-          />
-        </button>
-        {ui.timelineOpen && (
-          <>
-            <div
-              className="h-1 cursor-row-resize bg-[var(--border)] hover:bg-[var(--accent)]"
-              onMouseDown={(e) => {
-                drag.current = { startY: e.clientY, startH: ui.timelineHeight };
-              }}
-            />
-            <div style={{ height: ui.timelineHeight }}>
-              <Timeline />
-            </div>
-          </>
-        )}
+        <div
+          className="h-1 cursor-row-resize bg-[var(--border)] hover:bg-[var(--accent)]"
+          onMouseDown={(e) => {
+            drag.current = { startY: e.clientY, startH: ui.timelineHeight };
+          }}
+          aria-label="Resize timeline"
+        />
+        <div style={{ height: ui.timelineHeight }}>
+          <Timeline />
+        </div>
       </div>
 
       <ExportDialog />
