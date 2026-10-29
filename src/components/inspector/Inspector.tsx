@@ -100,10 +100,6 @@ export function Inspector() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-[var(--surface)]">
-      <div className="border-b border-[var(--border)] px-3 py-2.5">
-        <h2 className="text-sm font-semibold tracking-tight">Inspector</h2>
-      </div>
-
       {/* Global animation settings */}
       <section className="space-y-2.5 border-b border-[var(--border)] p-3">
         <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">

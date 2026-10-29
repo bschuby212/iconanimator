@@ -15,7 +15,7 @@ function isRedundantAssistantLine(content: string) {
   );
 }
 
-export function AiPromptBar() {
+export function AiChatPanel() {
   const project = useProjectStore((s) => s.project);
   const ui = useProjectStore((s) => s.ui);
   const sendChat = useProjectStore((s) => s.sendChat);
@@ -23,35 +23,32 @@ export function AiPromptBar() {
   const generateFromPlan = useProjectStore((s) => s.generateFromPlan);
   const approveLetter = useProjectStore((s) => s.approveLetter);
   const [draft, setDraft] = useState("");
-  const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const messages = useMemo(() => {
-    // Drop bootstrap/redundant system lines; keep a short recent thread
     return project.conversation
       .filter((m) => m.role === "user" || !isRedundantAssistantLine(m.content))
-      .slice(-6);
+      .slice(-8);
   }, [project.conversation]);
-
-  const showPanel =
-    expanded ||
-    messages.length > 0 ||
-    (!!project.plan && !project.animation) ||
-    !!project.animation;
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, project.plan?.steps.length, project.animation]);
 
-  if (!project.icon) return null;
+  if (!project.icon) {
+    return (
+      <div className="flex h-full items-center justify-center px-6 text-center text-xs text-[var(--text-secondary)]">
+        Select an icon to describe an animation
+      </div>
+    );
+  }
 
   const onSubmit = () => {
     if (!draft.trim()) return;
     if (project.animation) refineWithPrompt(draft.trim());
     else sendChat(draft.trim());
     setDraft("");
-    setExpanded(true);
   };
 
   const canGenerate =
@@ -70,68 +67,69 @@ export function AiPromptBar() {
         : "send";
 
   return (
-    <div className="shrink-0 border-t border-[var(--border)] bg-white">
-      {showPanel && (
-        <div
-          ref={scrollRef}
-          className="max-h-[400px] space-y-3 overflow-y-auto px-4 py-3"
-        >
-          {messages.map((m) => (
-            <div
-              key={m.id}
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        {messages.length === 0 && !project.plan && !project.animation && (
+          <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+            Describe the motion you want. Keep it short — generate when the plan looks right.
+          </p>
+        )}
+
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={cn(
+              "text-[13px] leading-relaxed",
+              m.role === "user" ? "text-[var(--text)]" : "text-[var(--text-secondary)]",
+            )}
+          >
+            <span
               className={cn(
-                "text-[13px] leading-relaxed",
-                m.role === "user" ? "text-[var(--text)]" : "text-[var(--text-secondary)]",
+                "mr-1.5 font-medium",
+                m.role === "user" ? "text-[var(--text)]" : "text-[var(--accent)]",
               )}
             >
-              <span
-                className={cn(
-                  "mr-1.5 font-medium",
-                  m.role === "user" ? "text-[var(--text)]" : "text-[var(--accent)]",
-                )}
-              >
-                {m.role === "user" ? "You" : "AI"}
-              </span>
-              {m.content}
-            </div>
-          ))}
+              {m.role === "user" ? "You" : "AI"}
+            </span>
+            {m.content}
+          </div>
+        ))}
 
-          {project.plan && !project.animation && (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
-              <p className="mb-2 text-xs font-medium text-[var(--text)]">
-                Plan · {project.plan.duration}ms · {project.plan.style}
-              </p>
-              <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-[var(--text-secondary)]">
-                {project.plan.steps.map((s) => (
-                  <li key={s.id}>{s.description}</li>
-                ))}
-              </ol>
-              {project.plan.limitations?.map((l) => (
-                <p key={l} className="mt-2 text-xs text-amber-700">
-                  {l}
-                </p>
-              ))}
-              {project.plan.needsApproval?.map((n) => (
-                <div key={n} className="mt-2 flex flex-wrap items-center gap-2">
-                  <p className="text-xs text-amber-700">{n}</p>
-                  <Button size="sm" variant="secondary" onClick={() => approveLetter()}>
-                    Approve
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {project.animation && (
-            <p className="text-xs text-[var(--text-secondary)]">
-              Animation ready · describe a change to refine
+        {project.plan && !project.animation && (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
+            <p className="mb-2 text-xs font-medium text-[var(--text)]">
+              Plan · {project.plan.duration}ms · {project.plan.style}
             </p>
-          )}
-        </div>
-      )}
+            <ol className="list-decimal space-y-1 pl-4 text-xs leading-relaxed text-[var(--text-secondary)]">
+              {project.plan.steps.map((s) => (
+                <li key={s.id}>{s.description}</li>
+              ))}
+            </ol>
+            {project.plan.limitations?.map((l) => (
+              <p key={l} className="mt-2 text-xs text-amber-700">
+                {l}
+              </p>
+            ))}
+            {project.plan.needsApproval?.map((n) => (
+              <div key={n} className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="text-xs text-amber-700">{n}</p>
+                <Button size="sm" variant="secondary" onClick={() => approveLetter()}>
+                  Approve
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
 
-      <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4">
-        <input
+        {project.animation && (
+          <p className="text-xs text-[var(--text-secondary)]">
+            Animation ready · refine here, or edit keyframes in the timeline
+          </p>
+        )}
+      </div>
+
+      <div className="shrink-0 space-y-2 border-t border-[var(--border)] p-3">
+        <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -141,19 +139,20 @@ export function AiPromptBar() {
               else onSubmit();
             }
           }}
-          onFocus={() => setExpanded(true)}
+          rows={3}
           placeholder={
             project.animation
               ? "Refine this animation…"
               : "Describe how you’d like this icon to animate…"
           }
-          className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm outline-none transition-colors placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)] focus:bg-white"
+          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-none transition-colors placeholder:text-[var(--text-secondary)] focus:border-[var(--accent)] focus:bg-white"
           data-testid="ai-prompt"
         />
         {primaryAction === "generate" ? (
           <Button
             size="md"
             variant="primary"
+            className="w-full"
             onClick={() => generateFromPlan()}
             disabled={!canGenerate || ui.generating}
           >
@@ -168,6 +167,7 @@ export function AiPromptBar() {
           <Button
             size="md"
             variant="primary"
+            className="w-full"
             onClick={onSubmit}
             disabled={!draft.trim() || ui.generating}
           >

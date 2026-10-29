@@ -33,9 +33,12 @@ import { saveProject } from "@/lib/persistence/db";
 
 export type CanvasBg = "canvas" | "white" | "transparent";
 
+export type RightTab = "chat" | "inspector";
+
 export interface UiState {
   leftOpen: boolean;
   rightOpen: boolean;
+  rightTab: RightTab;
   timelineOpen: boolean;
   timelineHeight: number;
   selectedComponentIds: string[];
@@ -59,6 +62,7 @@ interface Store {
   ui: UiState;
   setLeftOpen: (v: boolean) => void;
   setRightOpen: (v: boolean) => void;
+  setRightTab: (tab: RightTab) => void;
   setTimelineOpen: (v: boolean) => void;
   setTimelineHeight: (h: number) => void;
   setZoom: (z: number) => void;
@@ -137,8 +141,9 @@ function pushHistory(
 const defaultUi: UiState = {
   leftOpen: true,
   rightOpen: true,
+  rightTab: "chat",
   timelineOpen: false,
-  timelineHeight: 200,
+  timelineHeight: 220,
   selectedComponentIds: [],
   selectedElementIds: [],
   selectedKeyframeId: null,
@@ -157,9 +162,10 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   setLeftOpen: (v) => set((s) => ({ ui: { ...s.ui, leftOpen: v } })),
   setRightOpen: (v) => set((s) => ({ ui: { ...s.ui, rightOpen: v } })),
+  setRightTab: (tab) => set((s) => ({ ui: { ...s.ui, rightTab: tab } })),
   setTimelineOpen: (v) => set((s) => ({ ui: { ...s.ui, timelineOpen: v } })),
   setTimelineHeight: (h) =>
-    set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(360, Math.max(140, h)) } })),
+    set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(420, Math.max(160, h)) } })),
   setZoom: (z) =>
     set((s) => ({ ui: { ...s.ui, zoom: Math.min(3, Math.max(0.5, Number(z.toFixed(2)))) } })),
   setCanvasBg: (bg) => set((s) => ({ ui: { ...s.ui, canvasBg: bg } })),
@@ -201,6 +207,8 @@ export const useProjectStore = create<Store>((set, get) => ({
         playing: false,
         readyToGenerate: false,
         timelineOpen: false,
+        rightTab: "chat",
+        rightOpen: true,
       },
     }));
   },
@@ -215,7 +223,13 @@ export const useProjectStore = create<Store>((set, get) => ({
   },
 
   selectComponents: (ids) =>
-    set((s) => ({ ui: { ...s.ui, selectedComponentIds: ids } })),
+    set((s) => ({
+      ui: {
+        ...s.ui,
+        selectedComponentIds: ids,
+        ...(ids.length ? { rightTab: "inspector" as const, rightOpen: true } : {}),
+      },
+    })),
   selectElements: (ids) =>
     set((s) => ({ ui: { ...s.ui, selectedElementIds: ids } })),
 
@@ -344,6 +358,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         readyToGenerate: false,
         generating: false,
         timelineOpen: true,
+        rightTab: "inspector",
       },
     });
   },

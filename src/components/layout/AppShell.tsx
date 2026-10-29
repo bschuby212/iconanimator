@@ -11,8 +11,7 @@ import {
 } from "lucide-react";
 import { IconBrowser } from "@/components/library/IconBrowser";
 import { AnimationCanvas } from "@/components/canvas/AnimationCanvas";
-import { AiPromptBar } from "@/components/ai/AiPromptBar";
-import { Inspector } from "@/components/inspector/Inspector";
+import { RightSidebar } from "@/components/layout/RightSidebar";
 import { Timeline } from "@/components/layout/Timeline";
 import { ExportDialog } from "@/components/export/ExportDialog";
 import { Button } from "@/components/ui/button";
@@ -35,7 +34,6 @@ export function AppShell() {
   const redo = useProjectStore((s) => s.redo);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
 
-  // Autosave
   useEffect(() => {
     if (!project.icon) return;
     const t = window.setTimeout(() => {
@@ -156,7 +154,7 @@ export function AppShell() {
                   className="block w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--bg)]"
                   onClick={() => setRightOpen(!ui.rightOpen)}
                 >
-                  {ui.rightOpen ? "Hide inspector" : "Show inspector"}
+                  {ui.rightOpen ? "Hide panel" : "Show panel"}
                 </button>
                 <button
                   type="button"
@@ -204,21 +202,19 @@ export function AppShell() {
           <div className="min-h-0 flex-1">
             <AnimationCanvas />
           </div>
-          <AiPromptBar />
         </main>
 
         <aside
           className={cn(
-            "z-20 flex h-full w-[280px] shrink-0 flex-col border-l border-[var(--border)] bg-white",
-            "max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:w-[min(300px,90vw)] max-md:shadow-xl",
+            "z-20 flex h-full w-[300px] shrink-0 flex-col border-l border-[var(--border)] bg-white",
+            "max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:w-[min(320px,90vw)] max-md:shadow-xl",
             ui.rightOpen ? "translate-x-0" : "max-md:translate-x-full md:hidden",
           )}
         >
-          <Inspector />
+          <RightSidebar />
         </aside>
       </div>
 
-      {/* Timeline toggle + panel */}
       <div className="shrink-0 border-t border-[var(--border)] bg-white">
         <button
           type="button"
@@ -226,7 +222,14 @@ export function AppShell() {
           onClick={() => setTimelineOpen(!ui.timelineOpen)}
           data-testid="timeline-toggle"
         >
-          <span className="font-medium">Timeline</span>
+          <span className="font-medium">
+            Timeline
+            {project.animation ? (
+              <span className="ml-2 font-normal text-[var(--text-secondary)]">
+                · edit keyframes
+              </span>
+            ) : null}
+          </span>
           <ChevronUp
             className={cn(
               "h-3.5 w-3.5 transition-transform",
