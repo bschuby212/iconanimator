@@ -1,18 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import {
-  Pause,
-  Play,
-  RotateCcw,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { ZoomIn, ZoomOut } from "lucide-react";
 import {
   ICON_SIZE_DEFAULT,
   useProjectStore,
 } from "@/store/project-store";
 import { sampleAnimationAt } from "@/lib/animation/engine";
+import { DEFAULT_TRANSFORM } from "@/lib/animation/types";
 import { AnimatedSvgPreview } from "@/components/canvas/AnimatedSvgPreview";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
@@ -87,6 +82,21 @@ export function AnimationCanvas() {
       .flatMap((c) => c.elementIds);
   }, [project.components, ui.selectedComponentIds]);
 
+  const hiddenElementIds = useMemo(() => {
+    return new Set(
+      project.components.filter((c) => c.hidden).flatMap((c) => c.elementIds),
+    );
+  }, [project.components]);
+
+  const visibleTransforms = useMemo(() => {
+    if (!hiddenElementIds.size) return sampled.elements;
+    const next = { ...sampled.elements };
+    for (const id of hiddenElementIds) {
+      next[id] = { ...(next[id] ?? DEFAULT_TRANSFORM), opacity: 0 };
+    }
+    return next;
+  }, [sampled.elements, hiddenElementIds]);
+
   const bgClass =
     ui.canvasBg === "canvas"
       ? "canvas-surface"
@@ -99,35 +109,9 @@ export function AnimationCanvas() {
       className={cn("relative flex h-full min-h-0 flex-col overflow-hidden", bgClass)}
       data-testid="animation-canvas"
     >
-      {/* Floating compact toolbar */}
+      {/* Floating zoom / canvas toolbar — playback lives on the timeline */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 px-3">
         <div className="pointer-events-auto floating-toolbar flex items-center gap-0.5 px-1.5 py-1">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-            onClick={() => setPlaying(!ui.playing)}
-            disabled={!project.animation}
-            title={ui.playing ? "Pause" : "Play"}
-            data-testid="play-toggle"
-          >
-            {ui.playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-            onClick={() => {
-              setCurrentTime(0);
-              setPlaying(true);
-            }}
-            disabled={!project.animation}
-            title="Restart"
-            data-testid="restart-preview"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </Button>
-          <div className="mx-1 h-4 w-px bg-[var(--border)]" />
           <Button
             size="icon"
             variant="ghost"
@@ -175,7 +159,7 @@ export function AnimationCanvas() {
           <div className="icon-stage" data-testid="icon-stage">
             <AnimatedSvgPreview
               parsed={project.parsed}
-              transforms={sampled.elements}
+              transforms={visibleTransforms}
               selectedElementIds={selectedElementIds}
               size={displaySize}
               color={project.strokeColor}
@@ -187,7 +171,7 @@ export function AnimationCanvas() {
                 const cmp = project.components.find((c) =>
                   c.elementIds.includes(id),
                 );
-                if (cmp) selectComponents([cmp.id]);
+                if (cmp && !cmp.locked) selectComponents([cmp.id]);
               }}
             />
           </div>
