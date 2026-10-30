@@ -68,14 +68,47 @@ export function AppShell() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
+        return;
       }
       if (meta && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
         e.preventDefault();
         redo();
+        return;
+      }
+
+      const store = useProjectStore.getState();
+      if (meta && e.key === "c" && !typing) {
+        store.copySelectedKeyframe();
+        return;
+      }
+      if (meta && e.key === "v" && !typing) {
+        e.preventDefault();
+        store.pasteKeyframe();
+        return;
+      }
+      if (!typing && (e.key === "Delete" || e.key === "Backspace")) {
+        if (store.ui.selectedKeyframeId) {
+          e.preventDefault();
+          store.deleteSelectedKeyframe();
+        }
+        return;
+      }
+      if (!typing && e.code === "Space") {
+        if (!store.project.animation) return;
+        e.preventDefault();
+        store.setPlaying(!store.ui.playing);
       }
     };
     window.addEventListener("keydown", onKey);

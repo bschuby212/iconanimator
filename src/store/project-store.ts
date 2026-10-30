@@ -7,8 +7,10 @@ import {
   type AnimationDocument,
   type AnimationIntent,
   type AnimationPlan,
+  type ChatMessage,
   type CreationHistoryEntry,
   type IconSelection,
+  type ParsedSvg,
   type ProjectState,
   type SvgComponent,
 } from "@/lib/animation/types";
@@ -33,7 +35,21 @@ import {
   buildMotionProperties,
   type MotionToolId,
 } from "@/lib/animation/motions";
-import type { ElementTrack } from "@/lib/animation/types";
+import type {
+  AnimatableProperty,
+  ElementTrack,
+  EasingName,
+  Keyframe,
+} from "@/lib/animation/types";
+import {
+  defaultEndValueForProperty,
+  defaultValueForProperty,
+  hasKeyframeNear,
+  moveKeyframes,
+  propertiesForAddable,
+  resizeKeyframes,
+  type AddableAnimation,
+} from "@/lib/animation/timeline-edit";
 
 export type CanvasBg = "canvas" | "white" | "transparent";
 
@@ -47,6 +63,8 @@ export interface UiState {
   selectedComponentIds: string[];
   selectedElementIds: string[];
   selectedKeyframeId: string | null;
+  selectedTrack: { elementId: string; property: AnimatableProperty } | null;
+  keyframeClipboard: Keyframe | null;
   currentTime: number;
   playing: boolean;
   zoom: number;
@@ -105,24 +123,50 @@ interface Store {
     elementId: string,
     property: string,
     keyframeId: string,
-    patch: { time?: number; value?: number | string },
+    patch: { time?: number; value?: number | string; easing?: EasingName },
   ) => void;
   setDuration: (ms: number) => void;
   ensureAnimation: () => void;
   applyMotionTool: (tool: MotionToolId) => void;
   setPropertyAtPlayhead: (
     componentId: string,
-    property:
-      | "x"
-      | "y"
-      | "rotation"
-      | "scaleX"
-      | "scaleY"
-      | "opacity"
-      | "skewX"
-      | "skewY",
-    value: number,
+    property: AnimatableProperty,
+    value: number | string,
   ) => void;
+  selectKeyframe: (
+    id: string | null,
+    track?: { elementId: string; property: AnimatableProperty } | null,
+  ) => void;
+  addAnimationProperty: (
+    componentId: string,
+    kind: AddableAnimation,
+  ) => void;
+  toggleKeyframeAtPlayhead: (
+    componentId: string,
+    property: AnimatableProperty,
+  ) => void;
+  deleteSelectedKeyframe: () => void;
+  movePropertySpan: (
+    elementId: string,
+    property: AnimatableProperty,
+    deltaMs: number,
+  ) => void;
+  resizePropertySpan: (
+    elementId: string,
+    property: AnimatableProperty,
+    edge: "start" | "end",
+    nextEdgeTime: number,
+  ) => void;
+  setKeyframeEasing: (
+    elementId: string,
+    property: AnimatableProperty,
+    keyframeId: string,
+    easing: EasingName,
+  ) => void;
+  copySelectedKeyframe: () => void;
+  pasteKeyframe: () => void;
+  setComponentHidden: (id: string, hidden: boolean) => void;
+  setComponentLocked: (id: string, locked: boolean) => void;
 }
 
 function freshProject(): ProjectState {
@@ -202,6 +246,8 @@ const defaultUi: UiState = {
   selectedComponentIds: [],
   selectedElementIds: [],
   selectedKeyframeId: null,
+  selectedTrack: null,
+  keyframeClipboard: null,
   currentTime: 0,
   playing: false,
   zoom: 1,
@@ -759,22 +805,12 @@ export const useProjectStore = create<Store>((set, get) => ({
   setDuration: (ms) => {
     const { project } = get();
     if (!project.animation) return;
-    const factor = ms / Math.max(project.animation.duration, 1);
-    const animation: AnimationDocument = {
+    // Global duration only — do not rescale individual keyframe timings.
+    const duration = Math.max(100, Math.round(ms));
+    get().updateAnimation({
       ...project.animation,
-      duration: ms,
-      tracks: project.animation.tracks.map((t) => ({
-        ...t,
-        properties: t.properties.map((p) => ({
-          ...p,
-          keyframes: p.keyframes.map((k) => ({
-            ...k,
-            time: Math.round(k.time * factor),
-          })),
-        })),
-      })),
-    };
-    get().updateAnimation(animation);
+      duration,
+    });
   },
 
   ensureAnimation: () => {
@@ -907,6 +943,355 @@ export const useProjectStore = create<Store>((set, get) => ({
 
     get().updateAnimation({ ...anim, tracks });
   },
+
+  selectKeyframe: (id, track = null) =>
+    set((s) => ({
+      ui: {
+        ...s.ui,
+        selectedKeyframeId: id,
+        selectedTrack: track ?? (id ? s.ui.selectedTrack : null),
+      },
+    })),
+
+  addAnimationProperty: (componentId, kind) => {
+    const { project, ui } = get();
+    const component = project.components.find((c) => c.id === componentId);
+    if (!component || component.locked) return;
+    if (!project.animation) get().ensureAnimation();
+    const anim = get().project.animation;
+    if (!anim) return;
+
+    const props = propertiesForAddable(kind);
+    const start = Math.round(ui.currentTime);
+    const end = Math.min(
+      anim.duration,
+      Math.max(start + 800, start + 1),
+    );
+    let tracks = [...anim.tracks];
+    let lastElementId = component.elementIds[0];
+    let lastProp = props[0];
+
+    for (const elementId of component.elementIds) {
+      lastElementId = elementId;
+      const idx = tracks.findIndex((t) => t.elementId === elementId);
+      const track: ElementTrack =
+        idx >= 0
+          ? { ...tracks[idx], properties: [...tracks[idx].properties] }
+          : { elementId, name: component.name, properties: [] };
+
+      for (const property of props) {
+        lastProp = property;
+        if (track.properties.some((p) => p.property === property)) continue;
+        track.properties.push({
+          property,
+          keyframes: [
+            {
+              id: `kf_${nanoid(6)}`,
+              time: start,
+              value: defaultValueForProperty(property),
+              easing: "easeInOut",
+            },
+            {
+              id: `kf_${nanoid(6)}`,
+              time: end,
+              value: defaultEndValueForProperty(property),
+              easing: "easeOut",
+            },
+          ],
+        });
+      }
+
+      if (idx >= 0) tracks[idx] = track;
+      else tracks.push(track);
+    }
+
+    get().updateAnimation({ ...anim, tracks, loop: true });
+    set((s) => ({
+      ui: {
+        ...s.ui,
+        selectedTrack: { elementId: lastElementId, property: lastProp },
+        selectedKeyframeId: null,
+        playing: false,
+      },
+    }));
+  },
+
+  toggleKeyframeAtPlayhead: (componentId, property) => {
+    const { project, ui } = get();
+    const component = project.components.find((c) => c.id === componentId);
+    if (!component || component.locked) return;
+    if (!project.animation) get().ensureAnimation();
+    const anim = get().project.animation;
+    if (!anim) return;
+
+    const time = Math.round(ui.currentTime);
+    let tracks = [...anim.tracks];
+    let toggledId: string | null = ui.selectedKeyframeId;
+    let focusElementId = component.elementIds[0];
+
+    for (const elementId of component.elementIds) {
+      focusElementId = elementId;
+      const idx = tracks.findIndex((t) => t.elementId === elementId);
+      const track: ElementTrack =
+        idx >= 0
+          ? { ...tracks[idx], properties: [...tracks[idx].properties] }
+          : { elementId, name: component.name, properties: [] };
+
+      const pIdx = track.properties.findIndex((p) => p.property === property);
+      if (pIdx >= 0) {
+        const prop = track.properties[pIdx];
+        const near = hasKeyframeNear(prop.keyframes, time);
+        if (near) {
+          track.properties[pIdx] = {
+            ...prop,
+            keyframes: prop.keyframes.filter((k) => k.id !== near.id),
+          };
+          toggledId = ui.selectedKeyframeId === near.id ? null : toggledId;
+        } else {
+          const id = `kf_${nanoid(6)}`;
+          const sorted = [...prop.keyframes].sort((a, b) => a.time - b.time);
+          let value: number | string = defaultValueForProperty(property);
+          for (const k of sorted) {
+            if (k.time <= time) value = k.value;
+          }
+          const easing: EasingName = "easeInOut";
+          track.properties[pIdx] = {
+            ...prop,
+            keyframes: [
+              ...prop.keyframes,
+              { id, time, value, easing },
+            ].sort((a, b) => a.time - b.time),
+          };
+          toggledId = id;
+        }
+      } else {
+        const id = `kf_${nanoid(6)}`;
+        const easing: EasingName = "easeInOut";
+        track.properties.push({
+          property,
+          keyframes: [
+            {
+              id: `kf_${nanoid(6)}`,
+              time: 0,
+              value: defaultValueForProperty(property),
+              easing,
+            },
+            {
+              id,
+              time,
+              value: defaultValueForProperty(property),
+              easing,
+            },
+          ],
+        });
+        toggledId = id;
+      }
+
+      if (idx >= 0) tracks[idx] = track;
+      else tracks.push(track);
+    }
+
+    get().updateAnimation({ ...anim, tracks });
+    set((s) => ({
+      ui: {
+        ...s.ui,
+        selectedKeyframeId: toggledId,
+        selectedTrack: { elementId: focusElementId, property },
+      },
+    }));
+  },
+
+  deleteSelectedKeyframe: () => {
+    const { project, ui } = get();
+    if (!project.animation || !ui.selectedKeyframeId) return;
+    const id = ui.selectedKeyframeId;
+    const animation: AnimationDocument = {
+      ...project.animation,
+      tracks: project.animation.tracks.map((t) => ({
+        ...t,
+        properties: t.properties.map((p) => ({
+          ...p,
+          keyframes: p.keyframes.filter((k) => k.id !== id),
+        })),
+      })),
+    };
+    get().updateAnimation(animation);
+    set((s) => ({
+      ui: { ...s.ui, selectedKeyframeId: null },
+    }));
+  },
+
+  movePropertySpan: (elementId, property, deltaMs) => {
+    const { project } = get();
+    if (!project.animation || !deltaMs) return;
+    const animation: AnimationDocument = {
+      ...project.animation,
+      tracks: project.animation.tracks.map((t) => {
+        if (t.elementId !== elementId) return t;
+        return {
+          ...t,
+          properties: t.properties.map((p) => {
+            if (p.property !== property) return p;
+            return { ...p, keyframes: moveKeyframes(p.keyframes, deltaMs) };
+          }),
+        };
+      }),
+    };
+    // Extend global duration if needed
+    let maxT = animation.duration;
+    for (const t of animation.tracks) {
+      for (const p of t.properties) {
+        for (const k of p.keyframes) maxT = Math.max(maxT, k.time);
+      }
+    }
+    get().updateAnimation({
+      ...animation,
+      duration: Math.max(animation.duration, maxT),
+    });
+  },
+
+  resizePropertySpan: (elementId, property, edge, nextEdgeTime) => {
+    const { project } = get();
+    if (!project.animation) return;
+    const animation: AnimationDocument = {
+      ...project.animation,
+      tracks: project.animation.tracks.map((t) => {
+        if (t.elementId !== elementId) return t;
+        return {
+          ...t,
+          properties: t.properties.map((p) => {
+            if (p.property !== property) return p;
+            return {
+              ...p,
+              keyframes: resizeKeyframes(p.keyframes, edge, nextEdgeTime),
+            };
+          }),
+        };
+      }),
+    };
+    let maxT = animation.duration;
+    for (const t of animation.tracks) {
+      for (const p of t.properties) {
+        for (const k of p.keyframes) maxT = Math.max(maxT, k.time);
+      }
+    }
+    get().updateAnimation({
+      ...animation,
+      duration: Math.max(animation.duration, maxT),
+    });
+  },
+
+  setKeyframeEasing: (elementId, property, keyframeId, easing) => {
+    const { project } = get();
+    if (!project.animation) return;
+    const animation: AnimationDocument = {
+      ...project.animation,
+      tracks: project.animation.tracks.map((t) => {
+        if (t.elementId !== elementId) return t;
+        return {
+          ...t,
+          properties: t.properties.map((p) => {
+            if (p.property !== property) return p;
+            return {
+              ...p,
+              keyframes: p.keyframes.map((k) =>
+                k.id === keyframeId ? { ...k, easing } : k,
+              ),
+            };
+          }),
+        };
+      }),
+    };
+    get().updateAnimation(animation);
+  },
+
+  copySelectedKeyframe: () => {
+    const { project, ui } = get();
+    if (!project.animation || !ui.selectedKeyframeId) return;
+    for (const t of project.animation.tracks) {
+      for (const p of t.properties) {
+        const k = p.keyframes.find((kf) => kf.id === ui.selectedKeyframeId);
+        if (k) {
+          set((s) => ({
+            ui: {
+              ...s.ui,
+              keyframeClipboard: { ...k },
+              selectedTrack: { elementId: t.elementId, property: p.property },
+            },
+          }));
+          return;
+        }
+      }
+    }
+  },
+
+  pasteKeyframe: () => {
+    const { project, ui } = get();
+    if (!project.animation || !ui.keyframeClipboard || !ui.selectedTrack) return;
+    const { elementId, property } = ui.selectedTrack;
+    const time = Math.round(ui.currentTime);
+    const clip = ui.keyframeClipboard;
+    const id = `kf_${nanoid(6)}`;
+    const animation: AnimationDocument = {
+      ...project.animation,
+      tracks: project.animation.tracks.map((t) => {
+        if (t.elementId !== elementId) return t;
+        return {
+          ...t,
+          properties: t.properties.map((p) => {
+            if (p.property !== property) return p;
+            const near = hasKeyframeNear(p.keyframes, time);
+            if (near) {
+              return {
+                ...p,
+                keyframes: p.keyframes.map((k) =>
+                  k.id === near.id
+                    ? { ...k, value: clip.value, easing: clip.easing }
+                    : k,
+                ),
+              };
+            }
+            return {
+              ...p,
+              keyframes: [
+                ...p.keyframes,
+                {
+                  id,
+                  time,
+                  value: clip.value,
+                  easing: clip.easing,
+                },
+              ].sort((a, b) => a.time - b.time),
+            };
+          }),
+        };
+      }),
+    };
+    get().updateAnimation(animation);
+    set((s) => ({
+      ui: { ...s.ui, selectedKeyframeId: id },
+    }));
+  },
+
+  setComponentHidden: (id, hidden) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        components: s.project.components.map((c) =>
+          c.id === id ? { ...c, hidden } : c,
+        ),
+      },
+    })),
+
+  setComponentLocked: (id, locked) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        components: s.project.components.map((c) =>
+          c.id === id ? { ...c, locked } : c,
+        ),
+      },
+    })),
 }));
 
 export type { ParsedSvg, SvgComponent, ChatMessage };

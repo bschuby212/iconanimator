@@ -65,6 +65,7 @@ export interface SvgComponent {
   elementIds: string[];
   transformOrigin: TransformOrigin;
   locked?: boolean;
+  hidden?: boolean;
   role?: ComponentRole;
 }
 
