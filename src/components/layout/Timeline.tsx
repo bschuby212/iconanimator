@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { useProjectStore } from "@/store/project-store";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ export function Timeline() {
   const ui = useProjectStore((s) => s.ui);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const setPlaying = useProjectStore((s) => s.setPlaying);
+  const setDuration = useProjectStore((s) => s.setDuration);
   const updateTrackProperty = useProjectStore((s) => s.updateTrackProperty);
   const selectComponents = useProjectStore((s) => s.selectComponents);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -24,6 +25,13 @@ export function Timeline() {
   const duration = Math.max(project.animation?.duration ?? 1000, 1);
   const hasAnim = !!project.animation;
   const progress = Math.min(Math.max(ui.currentTime / duration, 0), 1);
+  const [lengthDraft, setLengthDraft] = useState(() =>
+    (duration / 1000).toFixed(duration % 1000 === 0 ? 0 : 1),
+  );
+
+  useEffect(() => {
+    setLengthDraft((duration / 1000).toFixed(duration % 1000 === 0 ? 0 : 1));
+  }, [duration]);
 
   // Prefer semantic component names; collapse multi-element tracks under component
   const rows = useMemo(() => {
@@ -63,11 +71,24 @@ export function Timeline() {
     setPlaying(false);
   };
 
+  const commitLength = () => {
+    if (!hasAnim) return;
+    const seconds = Number(lengthDraft);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      setLengthDraft((duration / 1000).toFixed(duration % 1000 === 0 ? 0 : 1));
+      return;
+    }
+    const ms = Math.round(Math.min(Math.max(seconds * 1000, 100), 60000));
+    setDuration(ms);
+    if (ui.currentTime > ms) setCurrentTime(ms);
+    setLengthDraft((ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1));
+  };
+
   return (
     <div className="flex h-full flex-col bg-white" data-testid="timeline">
-      {/* Transport / time controls */}
+      {/* Bottom-panel animation transport — keep canvas mini menu unchanged */}
       <div
-        className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--bg)] px-2 py-1.5"
+        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--bg)] px-2 py-1.5"
         data-testid="timeline-transport"
       >
         <Button
@@ -117,7 +138,7 @@ export function Timeline() {
           value={Math.min(ui.currentTime, duration)}
           disabled={!hasAnim}
           onChange={(e) => onSliderChange(Number(e.target.value))}
-          className="timeline-scrubber min-w-0 flex-1"
+          className="timeline-scrubber min-w-[120px] flex-1"
           aria-label="Scrub timeline"
           data-testid="timeline-scrubber"
         />
@@ -125,6 +146,34 @@ export function Timeline() {
         <span className="w-12 shrink-0 text-[11px] tabular-nums text-[var(--text-secondary)]">
           {formatMs(duration)}
         </span>
+
+        <div className="mx-0.5 hidden h-4 w-px bg-[var(--border)] sm:block" />
+
+        <label
+          className="flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--text-secondary)]"
+          title="Animation length"
+        >
+          <span className="hidden sm:inline">Length</span>
+          <input
+            type="number"
+            min={0.1}
+            max={60}
+            step={0.1}
+            disabled={!hasAnim}
+            value={lengthDraft}
+            onChange={(e) => setLengthDraft(e.target.value)}
+            onBlur={commitLength}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
+            className="h-7 w-14 rounded-md border border-[var(--border)] bg-white px-1.5 text-right text-[12px] tabular-nums text-[var(--text)] outline-none focus:border-[#0f9f8a]/50 disabled:opacity-45"
+            aria-label="Animation length in seconds"
+            data-testid="animation-length"
+          />
+          <span>s</span>
+        </label>
       </div>
 
       {!hasAnim ? (
