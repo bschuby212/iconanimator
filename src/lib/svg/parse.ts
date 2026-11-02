@@ -11,6 +11,29 @@ function parseAttributes(el: Element): Record<string, string> {
   return attrs;
 }
 
+/**
+ * Only split stroke-only / unfilled compound paths.
+ * Splitting filled paths (Phosphor, Bootstrap, Material) destroys evenodd holes
+ * and turns icons into solid blobs.
+ */
+function canSafelySplitPath(
+  el: Element,
+  inherited: { fill?: string; stroke?: string } = {},
+): boolean {
+  const fill = (el.getAttribute("fill") || inherited.fill || "").toLowerCase();
+  const stroke = el.getAttribute("stroke") || inherited.stroke || "";
+  const fillRule = (
+    el.getAttribute("fill-rule") ||
+    el.getAttribute("fillRule") ||
+    ""
+  ).toLowerCase();
+  if (fillRule === "evenodd") return false;
+  if (fill === "none" || fill === "transparent") return true;
+  if (stroke && (!fill || fill === "none")) return true;
+  // Default SVG fill is black — treat unspecified fill as solid (do not split)
+  return false;
+}
+
 function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
   const sanitized = sanitizeSvg(svg);
   const doc = new DOMParser().parseFromString(sanitized, "image/svg+xml");
@@ -33,7 +56,7 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
     const tag = child.tagName.toLowerCase();
     if (tag === "title" || tag === "desc" || tag === "metadata") continue;
 
-    if (tag === "path" && splitPaths) {
+    if (tag === "path" && splitPaths && canSafelySplitPath(child)) {
       const d = child.getAttribute("d") || "";
       const subpaths = splitPathData(d);
       if (subpaths.length > 1) {
@@ -57,19 +80,33 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
 
     if (tag === "g") {
       const groupId = `el_${nanoid(8)}`;
+      const groupAttrs = parseAttributes(child);
       const group: SvgElementNode = {
         id: groupId,
         tag: "g",
-        attributes: parseAttributes(child),
+        attributes: groupAttrs,
         children: [],
         originalId: child.getAttribute("id") || undefined,
       };
+      const inherited = {
+        fill: groupAttrs.fill,
+        stroke: groupAttrs.stroke,
+      };
       for (const gc of Array.from(child.children)) {
-        if (gc.tagName.toLowerCase() === "path" && splitPaths) {
+        if (
+          gc.tagName.toLowerCase() === "path" &&
+          splitPaths &&
+          canSafelySplitPath(gc, inherited)
+        ) {
           const d = gc.getAttribute("d") || "";
           const subpaths = splitPathData(d);
           const baseAttrs = parseAttributes(gc);
           delete baseAttrs.d;
+          // Inherit stroke/fill from group when missing on the path
+          if (!baseAttrs.fill && inherited.fill) baseAttrs.fill = inherited.fill;
+          if (!baseAttrs.stroke && inherited.stroke) {
+            baseAttrs.stroke = inherited.stroke;
+          }
           for (const sub of subpaths) {
             const id = `el_${nanoid(8)}`;
             const node: SvgElementNode = {
@@ -109,7 +146,27 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
       attributes: parseAttributes(child),
       children: [],
       originalId: child.getAttribute("id") || undefined,
+      ...(tag === "text" || tag === "tspan"
+        ? { textContent: child.textContent ?? "" }
+        : {}),
     };
+    // Nested tspans under text
+    if (tag === "text") {
+      for (const tc of Array.from(child.children)) {
+        if (tc.tagName.toLowerCase() !== "tspan") continue;
+        const tid = `el_${nanoid(8)}`;
+        const tnode: SvgElementNode = {
+          id: tid,
+          tag: "tspan",
+          attributes: parseAttributes(tc),
+          children: [],
+          parentId: id,
+          textContent: tc.textContent ?? "",
+        };
+        node.children.push(tnode);
+        elementMap[tid] = tnode;
+      }
+    }
     elements.push(node);
     elementMap[id] = node;
   }
@@ -198,6 +255,8 @@ export function parseSvg(
   svg: string,
   options: { splitPaths?: boolean } = {},
 ): ParsedSvg {
+  // Default ON for component recognition. splitPathData converts relative
+  // movetos to absolute so subpaths keep correct positions when separated.
   const splitPaths = options.splitPaths !== false;
   if (typeof DOMParser !== "undefined") {
     return parseWithDom(svg, splitPaths);

@@ -78,6 +78,41 @@ function tracksForComponent(
   );
 }
 
+function textComponents(components: SvgComponent[]): SvgComponent[] {
+  return components.filter((c) => c.role === "text");
+}
+
+function wantsTextMotion(prompt: string, components: SvgComponent[]): boolean {
+  const p = prompt.toLowerCase();
+  const texts = textComponents(components);
+  if (!texts.length) return false;
+  if (texts.length === components.length) return true;
+  return (
+    p.includes("text") ||
+    p.includes("label") ||
+    p.includes("title") ||
+    p.includes("caption") ||
+    p.includes("headline") ||
+    p.includes("typewriter") ||
+    p.includes("word") ||
+    texts.some((t) => t.name && p.includes(t.name.toLowerCase()))
+  );
+}
+
+function describeTextMotion(prompt: string): string {
+  const p = prompt.toLowerCase();
+  if (p.includes("typewriter") || p.includes("type ")) return "Reveal the text like a typewriter fade.";
+  if (p.includes("slide") || p.includes("from below") || p.includes("up"))
+    return "Slide the text upward into place while fading in.";
+  if (p.includes("down")) return "Slide the text downward into place while fading in.";
+  if (p.includes("pop") || p.includes("bounce")) return "Pop the text in with a springy scale.";
+  if (p.includes("out") || p.includes("disappear") || p.includes("hide"))
+    return "Fade the text out and settle.";
+  if (p.includes("shake") || p.includes("wiggle")) return "Give the text a short shake.";
+  if (p.includes("float")) return "Float the text gently.";
+  return "Fade the text in with a soft settle.";
+}
+
 export function buildPlanFromPrompt(
   prompt: string,
   iconName: string,
@@ -92,6 +127,7 @@ export function buildPlanFromPrompt(
   let duration = intent.complexity === "simple" ? 800 : intent.complexity === "complex" ? 1800 : 1200;
   const loop = intent.interaction === "loop";
 
+  const texts = textComponents(components);
   const lid = findComponentByRole(components, "lid");
   const body = findComponentByRole(components, "body");
   const gear = findComponentByRole(components, "gear");
@@ -105,6 +141,31 @@ export function buildPlanFromPrompt(
   const arrow = findComponentByRole(components, "arrow");
   const tray = findComponentByRole(components, "tray");
   const glass = findComponentByRole(components, "glass");
+
+  if (wantsTextMotion(prompt, components)) {
+    for (const t of texts) {
+      steps.push(step(describeTextMotion(prompt), t));
+    }
+    if (texts.length > 1 && (p.includes("stagger") || p.includes("sequence") || intent.complexity !== "simple")) {
+      steps.push(step("Stagger each text layer slightly so they read in order."));
+    }
+    if (intent.intensity === "playful") {
+      steps.push(step("Add a light overshoot so the text feels playful."));
+    }
+    duration = Math.round(
+      (intent.complexity === "simple" ? 900 : intent.complexity === "complex" ? 1600 : 1200) /
+        (intent.intensity === "subtle" ? 1.1 : 1),
+    );
+    return {
+      iconName,
+      steps,
+      duration,
+      style: intent.style,
+      loop,
+      limitations: limitations.length ? limitations : undefined,
+      needsApproval: needsApproval.length ? needsApproval : undefined,
+    };
+  }
 
   if (
     (p.includes("lid") || p.includes("trash") || p.includes("open") && p.includes("close")) &&
@@ -210,7 +271,7 @@ export function buildPlanFromPrompt(
     steps.push(step("Return to the original position.", g));
     duration = 1400;
   } else if (p.includes("subtle") || p.includes("interactive") || p.includes("playful")) {
-    const target = gear ?? lid ?? components[0];
+    const target = gear ?? lid ?? texts[0] ?? components[0];
     steps.push(
       step(
         `Propose a ${intent.intensity} motion on ${target?.name ?? "the icon"} with restrained timing.`,
@@ -219,8 +280,11 @@ export function buildPlanFromPrompt(
     );
     duration = 900;
   } else {
-    const target = components[0];
+    const target = texts[0] ?? components[0];
     steps.push(step(`Animate ${target?.name ?? "icon"} according to: "${prompt}"`, target));
+    if (texts.length && target?.role !== "text") {
+      steps.push(step(describeTextMotion(prompt), texts[0]));
+    }
     duration = 1000;
   }
 
@@ -258,6 +322,121 @@ export function generateAnimationFromPlan(
   const letter = findComponentByRole(components, "letter");
   const arrow = findComponentByRole(components, "arrow");
   const glass = findComponentByRole(components, "glass") ?? components[0];
+
+  const texts = textComponents(components);
+
+  // Text layers — fade / slide / pop when asked, or when composition is text-only
+  if (wantsTextMotion(prompt, components) && texts.length) {
+    const slideUp =
+      p.includes("slide") ||
+      p.includes("from below") ||
+      p.includes("up") ||
+      (!p.includes("fade") && !p.includes("pop") && !p.includes("out"));
+    const slideDown = p.includes("down") && !p.includes("from below");
+    const popIn = p.includes("pop") || p.includes("bounce") || p.includes("spring");
+    const fadeOut = p.includes("out") || p.includes("disappear") || p.includes("hide");
+    const shake = p.includes("shake") || p.includes("wiggle");
+    const floaty = p.includes("float");
+    const stagger = texts.length > 1 && (p.includes("stagger") || p.includes("sequence") || intent.complexity !== "simple");
+
+    texts.forEach((t, index) => {
+      const delay = stagger ? Math.round((D * 0.12) * index) : 0;
+      const localD = Math.max(D - delay, Math.round(D * 0.55));
+      const amp = 6 * scale;
+
+      if (fadeOut) {
+        doc.tracks.push(
+          ...tracksForComponent(t, (id, name) =>
+            track(id, name, [
+              prop("opacity", [
+                kf(delay, 1, easing),
+                kf(delay + localD, 0, easing),
+              ]),
+              prop("y", [
+                kf(delay, 0, easing),
+                kf(delay + localD, -amp * 0.4, easing),
+              ]),
+            ]),
+          ),
+        );
+        return;
+      }
+
+      if (shake) {
+        doc.tracks.push(
+          ...tracksForComponent(t, (id, name) =>
+            track(id, name, [
+              prop("x", [
+                kf(delay, 0, easing),
+                kf(delay + localD * 0.2, amp * 0.5, easing),
+                kf(delay + localD * 0.4, -amp * 0.5, easing),
+                kf(delay + localD * 0.6, amp * 0.3, easing),
+                kf(delay + localD, 0, easing),
+              ]),
+              prop("opacity", [kf(delay, 1), kf(delay + localD, 1)]),
+            ]),
+          ),
+        );
+        return;
+      }
+
+      if (floaty) {
+        doc.tracks.push(
+          ...tracksForComponent(t, (id, name) =>
+            track(id, name, [
+              prop("y", [
+                kf(delay, 0, easing),
+                kf(delay + localD * 0.5, -amp * 0.7, easing),
+                kf(delay + localD, 0, wantSpring(intent) ? "spring" : easing),
+              ]),
+              prop("opacity", [
+                kf(delay, 0.85, easing),
+                kf(delay + localD * 0.5, 1, easing),
+                kf(delay + localD, 0.85, easing),
+              ]),
+            ]),
+          ),
+        );
+        return;
+      }
+
+      const fromY = slideDown ? -amp : slideUp ? amp : 0;
+      const peakScale = popIn
+        ? intent.intensity === "subtle"
+          ? 1.06
+          : intent.intensity === "playful"
+            ? 1.18
+            : 1.1
+        : 1;
+
+      doc.tracks.push(
+        ...tracksForComponent(t, (id, name) =>
+          track(id, name, [
+            prop("opacity", [
+              kf(delay, 0, easing),
+              kf(delay + localD * 0.55, 1, easing),
+              kf(delay + localD, 1, "linear"),
+            ]),
+            prop("y", [
+              kf(delay, fromY, easing),
+              kf(delay + localD, 0, wantSpring(intent) || popIn ? "spring" : easing),
+            ]),
+            prop("scaleX", [
+              kf(delay, popIn ? 0.86 : 1, easing),
+              kf(delay + localD * 0.55, peakScale, easing),
+              kf(delay + localD, 1, wantSpring(intent) || popIn ? "spring" : easing),
+            ]),
+            prop("scaleY", [
+              kf(delay, popIn ? 0.86 : 1, easing),
+              kf(delay + localD * 0.55, peakScale, easing),
+              kf(delay + localD, 1, wantSpring(intent) || popIn ? "spring" : easing),
+            ]),
+          ]),
+        ),
+      );
+    });
+    return doc;
+  }
 
   // Trash lid
   if (lid && (p.includes("lid") || p.includes("trash") || p.includes("open"))) {
@@ -527,7 +706,25 @@ export function generateAnimationFromPlan(
   }
 
   // Generic fallback — animate primary component, not whole-icon nonsense without structure
-  const target = components[0];
+  const target = texts[0] ?? components[0];
+  if (target?.role === "text") {
+    doc.tracks.push(
+      ...tracksForComponent(target, (id, name) =>
+        track(id, name, [
+          prop("opacity", [
+            kf(0, 0, easing),
+            kf(D * 0.55, 1, easing),
+            kf(D, 1, "linear"),
+          ]),
+          prop("y", [
+            kf(0, 6 * scale, easing),
+            kf(D, 0, wantSpring(intent) ? "spring" : easing),
+          ]),
+        ]),
+      ),
+    );
+    return doc;
+  }
   if (target) {
     doc.tracks.push(
       ...tracksForComponent(target, (id, name) =>
@@ -550,6 +747,25 @@ export function generateAnimationFromPlan(
         ]),
       ),
     );
+    // Also animate any accompanying text gently
+    for (const t of texts) {
+      doc.tracks.push(
+        ...tracksForComponent(t, (id, name) =>
+          track(id, name, [
+            prop("opacity", [
+              kf(0, 0, easing),
+              kf(D * 0.45, 1, easing),
+              kf(D, 1),
+            ]),
+            prop("y", [
+              kf(0, 4 * scale, easing),
+              kf(D * 0.7, 0, easing),
+              kf(D, 0),
+            ]),
+          ]),
+        ),
+      );
+    }
   }
   return doc;
 }
@@ -691,11 +907,26 @@ export function chatReply(
     p.includes("feel") ||
     p === "make this subtle" ||
     p === "something playful" ||
-    (p.length < 28 && !p.includes("rotate") && !p.includes("open") && !p.includes("move"));
+    (p.length < 28 &&
+      !p.includes("rotate") &&
+      !p.includes("open") &&
+      !p.includes("move") &&
+      !p.includes("text") &&
+      !p.includes("fade") &&
+      !p.includes("slide"));
 
   if (ambiguous && !hasPlan) {
     const gear = findComponentByRole(components, "gear");
     const lid = findComponentByRole(components, "lid");
+    const texts = textComponents(components);
+    if (texts.length && texts.length === components.length) {
+      return {
+        message:
+          "I can fade the text in, slide it up, or pop it with a spring. Subtle or more playful?",
+        readyToGenerate: false,
+        updatePlan: true,
+      };
+    }
     if (gear) {
       return {
         message:
@@ -707,6 +938,13 @@ export function chatReply(
     if (lid) {
       return {
         message: "I can open the lid, pause, then close it. Subtle or more expressive?",
+        readyToGenerate: false,
+        updatePlan: true,
+      };
+    }
+    if (texts.length) {
+      return {
+        message: `I can animate ${names}, including the text layers. Fade, slide, or pop?`,
         readyToGenerate: false,
         updatePlan: true,
       };

@@ -13,9 +13,12 @@
     "qa:report": "vitest run --reporter=json --outputFile=qa/vitest-results.json; node scripts/generate-qa-report.mjs"
   },
   "dependencies": {
+    "@iconify-json/bi": "^1.2.7",
     "@iconify-json/feather": "^1.2.1",
     "@iconify-json/heroicons": "^1.2.3",
+    "@iconify-json/iconoir": "^1.2.12",
     "@iconify-json/lucide": "^1.2.149",
+    "@iconify-json/material-symbols": "^1.2.97",
     "@iconify-json/ph": "^1.2.2",
     "@iconify-json/tabler": "^1.2.43",
     "@iconify/types": "^2.0.0",
@@ -29,7 +32,6 @@
     "@radix-ui/react-switch": "^1.4.1",
     "@radix-ui/react-tabs": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.4.1",
-    "@tabler/icons": "^3.50.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "geist": "^1.8.2",

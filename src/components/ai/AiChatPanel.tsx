@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils/cn";
 
 function isRedundantAssistantLine(content: string) {
   return (
-    content.startsWith("Selected ") ||
     content.startsWith("Got it. I'll plan") ||
     content.startsWith("Here’s a plan") ||
     content.startsWith("Here's a plan")
@@ -26,36 +25,33 @@ export function AiChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const textLayers = useMemo(
+    () => project.components.filter((c) => c.role === "text"),
+    [project.components],
+  );
+  const hasContent = !!project.icon || textLayers.length > 0;
+  const subjectLabel =
+    project.icon?.name ??
+    textLayers[0]?.name ??
+    (textLayers.length > 1 ? "your text" : "an icon");
+
   const messages = useMemo(() => {
     return project.conversation
       .filter((m) => m.role === "user" || !isRedundantAssistantLine(m.content))
-      .slice(-10);
+      .slice(-12);
   }, [project.conversation]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, project.plan?.steps.length, project.animation]);
+  }, [messages.length, project.plan?.steps.length, project.animation, ui.generating]);
 
-  if (!project.icon) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 bg-[#f7f7f7] px-6 text-center">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm">
-          <Sparkles className="h-4 w-4 text-[#0f9f8a]" />
-        </div>
-        <p className="text-sm font-medium text-black">Start with an icon</p>
-        <p className="text-xs text-[var(--text-secondary)]">
-          Pick one from the library, then describe the motion here.
-        </p>
-      </div>
-    );
-  }
-
-  const onSubmit = () => {
-    if (!draft.trim()) return;
-    if (project.animation) refineWithPrompt(draft.trim());
-    else sendChat(draft.trim());
+  const onSubmit = async () => {
+    if (!draft.trim() || ui.generating) return;
+    const text = draft.trim();
     setDraft("");
+    if (project.animation) refineWithPrompt(text);
+    else await sendChat(text);
     inputRef.current?.focus();
   };
 
@@ -80,9 +76,27 @@ export function AiChatPanel() {
         {messages.length === 0 && !project.plan && !project.animation && (
           <div className="rounded-2xl border border-black/[0.04] bg-white px-3.5 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
             <p className="text-[13px] leading-relaxed text-[var(--text-secondary)]">
-              Describe how you’d like{" "}
-              <span className="font-medium text-black">{project.icon.name}</span> to
-              animate. Chat is the main way to create and refine here.
+              {hasContent ? (
+                <>
+                  Describe how you’d like{" "}
+                  <span className="font-medium text-black">{subjectLabel}</span> to
+                  animate
+                  {textLayers.length > 0 && project.icon
+                    ? " — including text layers"
+                    : textLayers.length > 0
+                      ? " — fade, slide, pop, and more"
+                      : ""}
+                  .
+                </>
+              ) : (
+                <>
+                  Ask chat to place an icon and animate it — e.g.{" "}
+                  <span className="font-medium text-black">
+                    Put the settings icon from Tabler and make it spin
+                  </span>
+                  .
+                </>
+              )}
             </p>
           </div>
         )}
@@ -104,6 +118,18 @@ export function AiChatPanel() {
               </div>
             </div>
           ),
+        )}
+
+        {ui.generating && (
+          <div className="flex gap-2.5">
+            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0f9f8a]/15 text-[10px] font-semibold text-[#0b7f6e]">
+              AI
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-2xl rounded-tl-md border border-black/[0.04] bg-white px-3.5 py-2.5 text-[13px] text-[var(--text-secondary)] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0f9f8a]" />
+              Working…
+            </div>
+          </div>
         )}
 
         {project.plan && !project.animation && (
@@ -173,14 +199,18 @@ export function AiChatPanel() {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 if (primaryAction === "generate" && !draft.trim()) generateFromPlan();
-                else onSubmit();
+                else void onSubmit();
               }
             }}
             rows={2}
             placeholder={
               project.animation
                 ? "Ask for a change…"
-                : "Describe the animation…"
+                : hasContent
+                  ? textLayers.length && !project.icon
+                    ? "e.g. Fade the text in from below…"
+                    : "Describe the animation…"
+                  : "e.g. Put the settings icon from Tabler and make it spin"
             }
             className="w-full resize-none border-0 bg-transparent px-1.5 py-1 text-[13px] outline-none placeholder:text-[var(--text-secondary)]"
             data-testid="ai-prompt"
@@ -204,17 +234,21 @@ export function AiChatPanel() {
             ) : (
               <button
                 type="button"
-                onClick={onSubmit}
+                onClick={() => void onSubmit()}
                 disabled={!draft.trim() || ui.generating}
                 className={cn(
                   "inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors",
-                  draft.trim()
+                  draft.trim() && !ui.generating
                     ? "bg-[#0f9f8a] text-white hover:bg-[#0b7f6e]"
                     : "bg-black/[0.06] text-black/30",
                 )}
                 aria-label={project.animation ? "Apply" : "Send"}
               >
-                <ArrowUp className="h-3.5 w-3.5" />
+                {ui.generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ArrowUp className="h-3.5 w-3.5" />
+                )}
               </button>
             )}
           </div>

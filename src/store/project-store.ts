@@ -3,12 +3,16 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 import {
+  DEFAULT_FRAME,
   DEFAULT_INTENT,
   type AnimationDocument,
   type AnimationIntent,
   type AnimationPlan,
+  type ChatMessage,
   type CreationHistoryEntry,
+  type FrameSettings,
   type IconSelection,
+  type ParsedSvg,
   type ProjectState,
   type SvgComponent,
 } from "@/lib/animation/types";
@@ -28,6 +32,7 @@ import {
   refineAnimation,
   shouldAskClarification,
 } from "@/lib/ai/rules-engine";
+import { resolveIconFromPrompt } from "@/lib/ai/prompt-icon";
 import { saveProject } from "@/lib/persistence/db";
 import {
   buildMotionProperties,
@@ -35,9 +40,7 @@ import {
 } from "@/lib/animation/motions";
 import type { ElementTrack } from "@/lib/animation/types";
 
-export type CanvasBg = "canvas" | "white" | "transparent";
-
-export type RightTab = "chat" | "inspector" | "history";
+export type RightTab = "chat" | "animate" | "layers";
 
 export interface UiState {
   leftOpen: boolean;
@@ -50,8 +53,8 @@ export interface UiState {
   currentTime: number;
   playing: boolean;
   zoom: number;
-  canvasBg: CanvasBg;
   exportOpen: boolean;
+  historyOpen: boolean;
   readyToGenerate: boolean;
   generating: boolean;
 }
@@ -73,24 +76,36 @@ interface Store {
   duplicateProject: () => void;
   clearAnimation: () => void;
   setZoom: (z: number) => void;
-  setCanvasBg: (bg: CanvasBg) => void;
   setExportOpen: (v: boolean) => void;
+  setHistoryOpen: (v: boolean) => void;
   setCurrentTime: (t: number) => void;
   setPlaying: (p: boolean) => void;
   setIconSize: (size: number) => void;
+  setStrokeColor: (color: string) => void;
+  setStrokeWidth: (width: number) => void;
+  setFillColor: (color: string) => void;
+  setFrame: (partial: Partial<FrameSettings>) => void;
   setIntent: (partial: Partial<AnimationIntent>) => void;
   selectIcon: (icon: IconSelection) => void;
   uploadSvg: (svg: string, name?: string) => void;
   selectComponents: (ids: string[]) => void;
   selectElements: (ids: string[]) => void;
+  /** Canvas click: select a single SVG path/group and make it animatable. */
+  selectCanvasElement: (elementId: string | null) => void;
   renameComponent: (id: string, name: string) => void;
   setTransformOrigin: (
     componentId: string,
     origin: { x: number; y: number; absolute?: boolean },
   ) => void;
+  addTextLayer: (content?: string) => void;
+  updateTextContent: (
+    componentId: string,
+    patch: { content?: string; fontSize?: number; fill?: string },
+  ) => void;
+  clearIconKeepText: () => void;
   groupSelected: (name: string) => void;
   ungroup: (componentId: string) => void;
-  sendChat: (message: string) => void;
+  sendChat: (message: string) => Promise<void>;
   generateFromPlan: () => void;
   refineWithPrompt: (message: string) => void;
   updateAnimation: (doc: AnimationDocument) => void;
@@ -146,6 +161,7 @@ function freshProject(): ProjectState {
     strokeWidth: 2,
     strokeColor: "#171717",
     fillColor: "none",
+    frame: { ...DEFAULT_FRAME },
   };
 }
 
@@ -162,13 +178,24 @@ function pushHistory(
   };
 }
 
+function subjectName(project: ProjectState): string {
+  if (project.icon?.name) return project.icon.name;
+  const text = project.components.find((c) => c.role === "text");
+  if (text?.name) return text.name;
+  return project.name || "Composition";
+}
+
+function hasAnimatableContent(project: ProjectState): boolean {
+  return !!project.icon || project.components.length > 0;
+}
+
 function upsertCreation(
   project: ProjectState,
   patch: Partial<CreationHistoryEntry>,
 ): CreationHistoryEntry[] {
   const list = [...(project.creationHistory ?? [])];
   const id = project.activeCreationId;
-  if (!id || !project.icon) return list;
+  if (!id || !hasAnimatableContent(project)) return list;
   const idx = list.findIndex((e) => e.id === id);
   const base: CreationHistoryEntry =
     idx >= 0
@@ -179,7 +206,7 @@ function upsertCreation(
           updatedAt: Date.now(),
           status: "draft",
           name: project.name,
-          iconName: project.icon.name,
+          iconName: subjectName(project),
           prompt: "",
           icon: project.icon,
           parsed: project.parsed,
@@ -205,8 +232,8 @@ const defaultUi: UiState = {
   currentTime: 0,
   playing: false,
   zoom: 1,
-  canvasBg: "canvas",
   exportOpen: false,
+  historyOpen: false,
   readyToGenerate: false,
   generating: false,
 };
@@ -222,8 +249,8 @@ export const useProjectStore = create<Store>((set, get) => ({
     set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(420, Math.max(160, h)) } })),
   setZoom: (z) =>
     set((s) => ({ ui: { ...s.ui, zoom: Math.min(3, Math.max(0.5, Number(z.toFixed(2)))) } })),
-  setCanvasBg: (bg) => set((s) => ({ ui: { ...s.ui, canvasBg: bg } })),
   setExportOpen: (v) => set((s) => ({ ui: { ...s.ui, exportOpen: v } })),
+  setHistoryOpen: (v) => set((s) => ({ ui: { ...s.ui, historyOpen: v } })),
   setCurrentTime: (t) => set((s) => ({ ui: { ...s.ui, currentTime: t } })),
   setPlaying: (p) => set((s) => ({ ui: { ...s.ui, playing: p } })),
   setIconSize: (size) =>
@@ -233,6 +260,28 @@ export const useProjectStore = create<Store>((set, get) => ({
         iconSize: Math.min(ICON_SIZE_MAX, Math.max(ICON_SIZE_MIN, Math.round(size))),
       },
     })),
+  setStrokeColor: (color) =>
+    set((s) => ({ project: { ...s.project, strokeColor: color } })),
+  setStrokeWidth: (width) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        strokeWidth: Math.min(8, Math.max(0.5, Number(width))),
+      },
+    })),
+  setFillColor: (color) =>
+    set((s) => ({ project: { ...s.project, fillColor: color } })),
+  setFrame: (partial) =>
+    set((s) => {
+      const next = { ...(s.project.frame ?? DEFAULT_FRAME), ...partial };
+      next.size = Math.min(512, Math.max(48, Math.round(next.size)));
+      next.padding = Math.min(
+        Math.floor(next.size / 2) - 8,
+        Math.max(0, Math.round(next.padding)),
+      );
+      next.radius = Math.min(next.size / 2, Math.max(0, Math.round(next.radius)));
+      return { project: { ...s.project, frame: next } };
+    }),
 
   setIntent: (partial) =>
     set((s) => ({
@@ -241,7 +290,34 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   selectIcon: (icon) => {
     const parsed = parseSvg(icon.svg);
-    const components = recognizeComponents(parsed, icon.name);
+    let components = recognizeComponents(parsed, icon.name);
+    const { project } = get();
+
+    // Preserve existing text layers when swapping/adding an icon (icon + text)
+    const existingText = (project.components ?? []).filter(
+      (c) => c.role === "text",
+    );
+    if (existingText.length && project.parsed) {
+      const [, , vbW = 24, vbH = 24] = parsed.viewBox.split(/[\s,]+/).map(Number);
+      for (const tc of existingText) {
+        for (const eid of tc.elementIds) {
+          const node = project.parsed.elementMap[eid];
+          if (!node || node.tag !== "text") continue;
+          const nextNode = {
+            ...node,
+            attributes: {
+              ...node.attributes,
+              x: String(vbW / 2),
+              y: String(vbH + 10),
+            },
+          };
+          parsed.elements.push(nextNode);
+          parsed.elementMap[eid] = nextNode;
+        }
+        components = [...components, tc];
+      }
+    }
+
     const draftId = `gen_${nanoid(8)}`;
     const now = Date.now();
     const draft: CreationHistoryEntry = {
@@ -249,7 +325,7 @@ export const useProjectStore = create<Store>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       status: "draft",
-      name: "",
+      name: project.name || "",
       iconName: icon.name,
       prompt: "",
       icon,
@@ -278,7 +354,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         currentTime: 0,
         playing: false,
         readyToGenerate: false,
-        rightTab: "chat",
+        rightTab: existingText.length ? "animate" : "chat",
         rightOpen: true,
       },
     }));
@@ -298,11 +374,56 @@ export const useProjectStore = create<Store>((set, get) => ({
       ui: {
         ...s.ui,
         selectedComponentIds: ids,
-        ...(ids.length ? { rightTab: "inspector" as const, rightOpen: true } : {}),
+        ...(ids.length ? { rightTab: "animate" as const, rightOpen: true } : {}),
       },
     })),
   selectElements: (ids) =>
     set((s) => ({ ui: { ...s.ui, selectedElementIds: ids } })),
+
+  selectCanvasElement: (elementId) => {
+    if (!elementId) {
+      set((s) => ({
+        ui: {
+          ...s.ui,
+          selectedComponentIds: [],
+          selectedElementIds: [],
+        },
+      }));
+      return;
+    }
+
+    const { project } = get();
+    if (!project.parsed?.elementMap[elementId]) return;
+
+    // Prefer an existing single-element component for this path
+    let components = project.components;
+    let focused = components.find(
+      (c) => c.elementIds.length === 1 && c.elementIds[0] === elementId,
+    );
+
+    // Otherwise isolate the path so Animate/motions target only it
+    if (!focused) {
+      const node = project.parsed.elementMap[elementId];
+      const label =
+        node.originalId ||
+        `${node.tag}${components.filter((c) => c.role === "other").length + 1}`;
+      components = groupElements(components, [elementId], label, "other");
+      focused = components.find(
+        (c) => c.elementIds.length === 1 && c.elementIds[0] === elementId,
+      );
+    }
+
+    set({
+      project: { ...project, components },
+      ui: {
+        ...get().ui,
+        selectedElementIds: [elementId],
+        selectedComponentIds: focused ? [focused.id] : [],
+        rightTab: "animate",
+        rightOpen: true,
+      },
+    });
+  },
 
   renameComponent: (id, name) =>
     set((s) => ({
@@ -323,6 +444,178 @@ export const useProjectStore = create<Store>((set, get) => ({
         ),
       },
     })),
+
+  addTextLayer: (content = "Label") => {
+    const { project, ui } = get();
+    const elId = `el_${nanoid(8)}`;
+    const compId = `cmp_${nanoid(8)}`;
+
+    // Text-only: bootstrap a blank canvas when no icon/parsed SVG yet
+    const baseParsed =
+      project.parsed ??
+      ({
+        viewBox: "0 0 24 24",
+        width: 24,
+        height: 24,
+        rootAttributes: {
+          viewBox: "0 0 24 24",
+          xmlns: "http://www.w3.org/2000/svg",
+        },
+        elements: [],
+        elementMap: {},
+        originalSvg:
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"></svg>',
+      } as const);
+
+    const [, , vbW = 24, vbH = 24] = baseParsed.viewBox
+      .split(/[\s,]+/)
+      .map(Number);
+    const fontSize = project.parsed ? 4 : 6;
+    const textNode = {
+      id: elId,
+      tag: "text",
+      attributes: {
+        x: String(vbW / 2),
+        y: String(project.parsed ? vbH + 10 : vbH / 2 + fontSize / 3),
+        "font-size": String(fontSize),
+        "font-family": "ui-sans-serif, system-ui, sans-serif",
+        "text-anchor": "middle",
+        fill: project.strokeColor || "#171717",
+      },
+      children: [] as never[],
+      textContent: content,
+    };
+    const component = {
+      id: compId,
+      name: content.slice(0, 24) || "Text",
+      elementIds: [elId],
+      transformOrigin: { x: 0.5, y: 0.5 },
+      role: "text" as const,
+    };
+    const draftId = project.activeCreationId ?? `gen_${nanoid(8)}`;
+    set({
+      project: {
+        ...project,
+        activeCreationId: draftId,
+        parsed: {
+          ...baseParsed,
+          elements: [...baseParsed.elements, textNode],
+          elementMap: {
+            ...baseParsed.elementMap,
+            [elId]: textNode,
+          },
+        },
+        components: [...project.components, component],
+      },
+      ui: {
+        ...ui,
+        selectedComponentIds: [compId],
+        selectedElementIds: [elId],
+        rightTab: "animate",
+        rightOpen: true,
+      },
+    });
+  },
+
+  clearIconKeepText: () => {
+    const { project, ui } = get();
+    const textComponents = project.components.filter((c) => c.role === "text");
+    if (!textComponents.length || !project.parsed) return;
+
+    const elementMap: typeof project.parsed.elementMap = {};
+    const elements = [];
+    for (const c of textComponents) {
+      for (const eid of c.elementIds) {
+        const node = project.parsed.elementMap[eid];
+        if (!node) continue;
+        const next = {
+          ...node,
+          attributes: {
+            ...node.attributes,
+            x: "12",
+            y: "13",
+            "font-size": node.attributes["font-size"] || "6",
+          },
+        };
+        elements.push(next);
+        elementMap[eid] = next;
+      }
+    }
+
+    set({
+      project: {
+        ...project,
+        icon: null,
+        animation: null,
+        plan: null,
+        conversation: [],
+        history: [],
+        historyIndex: -1,
+        parsed: {
+          viewBox: "0 0 24 24",
+          width: 24,
+          height: 24,
+          rootAttributes: {
+            viewBox: "0 0 24 24",
+            xmlns: "http://www.w3.org/2000/svg",
+          },
+          elements,
+          elementMap,
+          originalSvg:
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"></svg>',
+        },
+        components: textComponents,
+      },
+      ui: {
+        ...ui,
+        currentTime: 0,
+        playing: false,
+        readyToGenerate: false,
+        selectedComponentIds: textComponents[0] ? [textComponents[0].id] : [],
+        rightTab: "animate",
+      },
+    });
+  },
+
+  updateTextContent: (componentId, patch) => {
+    const { project } = get();
+    const component = project.components.find((c) => c.id === componentId);
+    if (!component || !project.parsed) return;
+    const elementMap = { ...project.parsed.elementMap };
+    const elements = project.parsed.elements.map((el) => {
+      if (!component.elementIds.includes(el.id) || el.tag !== "text") {
+        return el;
+      }
+      const next = {
+        ...el,
+        attributes: { ...el.attributes },
+        textContent:
+          patch.content !== undefined ? patch.content : el.textContent,
+      };
+      if (patch.fontSize !== undefined) {
+        next.attributes["font-size"] = String(patch.fontSize);
+      }
+      if (patch.fill !== undefined) {
+        next.attributes.fill = patch.fill;
+      }
+      elementMap[el.id] = next;
+      return next;
+    });
+    set({
+      project: {
+        ...project,
+        parsed: { ...project.parsed, elements, elementMap },
+        components:
+          patch.content !== undefined
+            ? project.components.map((c) =>
+                c.id === componentId
+                  ? { ...c, name: patch.content!.slice(0, 24) || c.name }
+                  : c,
+              )
+            : project.components,
+      },
+    });
+  },
 
   groupSelected: (name) => {
     const { ui, project } = get();
@@ -347,56 +640,139 @@ export const useProjectStore = create<Store>((set, get) => ({
       },
     })),
 
-  sendChat: (message) => {
-    const { project, ui } = get();
-    if (!project.icon || !message.trim()) return;
+  sendChat: async (message) => {
+    if (!message.trim()) return;
     const userMsg = createUserMessage(message);
-    const reply = chatReply(
-      message,
-      project.icon.name,
-      project.components,
-      project.intent,
-      !!project.plan,
-    );
+    set((s) => ({ ui: { ...s.ui, generating: true } }));
 
-    let plan: AnimationPlan | null = project.plan;
-    if (reply.updatePlan || !project.plan) {
-      plan = buildPlanFromPrompt(
-        message,
-        project.icon.name,
+    try {
+      const resolved = await resolveIconFromPrompt(message);
+      let { project, ui } = get();
+
+      // Load icon from natural language when asked (e.g. "settings from tabler")
+      if (resolved.request.wantsIcon) {
+        if (!resolved.icon) {
+          const assistant = createAssistantMessage(
+            resolved.error ||
+              "I couldn't find that icon. Try a name like settings, trash, or heart, and optionally a library (Tabler, Lucide, Phosphor).",
+          );
+          const conversation = [...project.conversation, userMsg, assistant];
+          set({
+            project: { ...project, conversation },
+            ui: { ...ui, generating: false, readyToGenerate: false },
+          });
+          return;
+        }
+
+        get().selectIcon({
+          id: resolved.icon.id,
+          name: resolved.icon.name,
+          library: resolved.icon.library,
+          svg: resolved.icon.svg,
+          keywords: resolved.icon.keywords,
+        });
+        project = get().project;
+        ui = get().ui;
+      }
+
+      if (!hasAnimatableContent(project)) {
+        const assistant = createAssistantMessage(
+          "Tell me which icon to use — e.g. “Put the settings icon from Tabler and make it spin.” You can also pick one from the library.",
+        );
+        const conversation = [...project.conversation, userMsg, assistant];
+        set({
+          project: { ...project, conversation },
+          ui: { ...ui, generating: false, readyToGenerate: false, rightTab: "chat" },
+        });
+        return;
+      }
+
+      const planPrompt = resolved.request.motionPrompt || message;
+      const name = subjectName(project);
+      const reply = chatReply(
+        planPrompt,
+        name,
         project.components,
         project.intent,
+        !!project.plan,
       );
-    }
 
-    // Clear request: if no clarification needed, mark ready
-    const ready =
-      reply.readyToGenerate &&
-      (!shouldAskClarification(message) || project.conversation.length > 1);
+      let plan: AnimationPlan | null = project.plan;
+      if (reply.updatePlan || !project.plan) {
+        plan = buildPlanFromPrompt(
+          planPrompt,
+          name,
+          project.components,
+          project.intent,
+        );
+      }
 
-    const assistant = createAssistantMessage(reply.message);
-    const conversation = [...project.conversation, userMsg, assistant];
-    const creationHistory = upsertCreation(project, {
-      status: plan ? "planned" : "draft",
-      prompt: message,
-      plan,
-      conversation,
-      updatedAt: Date.now(),
-    });
-    set({
-      project: {
-        ...project,
-        conversation,
+      const loadedNote = resolved.icon
+        ? `Loaded ${resolved.icon.libraryName} “${resolved.icon.name}”. `
+        : "";
+      const assistant = createAssistantMessage(
+        `${loadedNote}${reply.message}`.trim(),
+      );
+      const conversation = [...(project.conversation ?? []), userMsg, assistant];
+
+      const ready =
+        (reply.readyToGenerate &&
+          (!shouldAskClarification(planPrompt) ||
+            project.conversation.length > 1 ||
+            resolved.request.autoGenerate)) ||
+        resolved.request.autoGenerate;
+
+      const creationHistory = upsertCreation(project, {
+        status: plan ? "planned" : "draft",
+        prompt: message,
         plan,
-        creationHistory,
-      },
-      ui: { ...ui, readyToGenerate: ready || reply.readyToGenerate },
-    });
+        conversation,
+        updatedAt: Date.now(),
+      });
+
+      set({
+        project: {
+          ...get().project,
+          conversation,
+          plan,
+          creationHistory,
+        },
+        ui: {
+          ...get().ui,
+          generating: false,
+          readyToGenerate: ready || reply.readyToGenerate,
+          rightTab: "chat",
+        },
+      });
+
+      // Clear icon + motion prompts: generate immediately
+      if (
+        (resolved.request.autoGenerate || ready) &&
+        plan &&
+        !get().project.animation
+      ) {
+        get().generateFromPlan();
+      }
+    } catch (e) {
+      const { project, ui } = get();
+      const assistant = createAssistantMessage(
+        e instanceof Error
+          ? `Something went wrong: ${e.message}`
+          : "Something went wrong loading that icon.",
+      );
+      set({
+        project: {
+          ...project,
+          conversation: [...project.conversation, userMsg, assistant],
+        },
+        ui: { ...ui, generating: false },
+      });
+    }
   },
 
   generateFromPlan: () => {
     const { project, ui } = get();
-    if (!project.icon || !project.plan) return;
+    if (!hasAnimatableContent(project) || !project.plan) return;
     const components = project.components;
     const parsed = project.parsed;
     const lastUser =
@@ -449,7 +825,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         playing: true,
         readyToGenerate: false,
         generating: false,
-        rightTab: "inspector",
+        rightTab: "animate",
       },
     });
   },
@@ -480,7 +856,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         playing: !!nextAnim,
         selectedComponentIds: [],
         selectedElementIds: [],
-        rightTab: nextAnim ? "inspector" : "chat",
+        rightTab: nextAnim ? "animate" : "chat",
         rightOpen: true,
         readyToGenerate: !!entry.plan && !nextAnim,
       },
@@ -537,7 +913,7 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   duplicateProject: () => {
     const { project } = get();
-    if (!project.icon) {
+    if (!hasAnimatableContent(project)) {
       get().newProject();
       return;
     }
@@ -549,7 +925,7 @@ export const useProjectStore = create<Store>((set, get) => ({
       updatedAt: now,
       status: project.animation ? "complete" : project.plan ? "planned" : "draft",
       name: project.name ? `${project.name} copy` : "",
-      iconName: project.icon.name,
+      iconName: subjectName(project),
       prompt:
         [...project.conversation].reverse().find((m) => m.role === "user")?.content ||
         "",
@@ -575,7 +951,7 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   clearAnimation: () => {
     const { project, ui } = get();
-    if (!project.icon) return;
+    if (!hasAnimatableContent(project)) return;
     const creationHistory = upsertCreation(project, {
       status: "draft",
       animation: null,
@@ -722,6 +1098,7 @@ export const useProjectStore = create<Store>((set, get) => ({
           ICON_SIZE_MAX,
           Math.max(ICON_SIZE_MIN, project.iconSize || ICON_SIZE_DEFAULT),
         ),
+        frame: { ...DEFAULT_FRAME, ...(project.frame ?? {}) },
       },
       ui: {
         ...defaultUi,
@@ -807,7 +1184,7 @@ export const useProjectStore = create<Store>((set, get) => ({
 
     const duration = current.animation.duration || 1200;
     const motionProps = buildMotionProperties(tool, duration);
-    let tracks = [...current.animation.tracks];
+    const tracks = [...current.animation.tracks];
 
     for (const elementId of selected.elementIds) {
       const existingIdx = tracks.findIndex((t) => t.elementId === elementId);
@@ -853,7 +1230,7 @@ export const useProjectStore = create<Store>((set, get) => ({
     if (!anim) return;
 
     const time = Math.round(ui.currentTime);
-    let tracks = [...anim.tracks];
+    const tracks = [...anim.tracks];
 
     for (const elementId of component.elementIds) {
       const idx = tracks.findIndex((t) => t.elementId === elementId);

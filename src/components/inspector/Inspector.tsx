@@ -10,8 +10,12 @@ import {
   type MotionToolId,
 } from "@/lib/animation/motions";
 import type { InteractionType } from "@/lib/animation/types";
+import { MotionDemo } from "@/components/inspector/MotionDemo";
 
 const GROUPS = ["Transform", "Opacity", "Appear", "Motion"] as const;
+
+const sectionLabel =
+  "text-[11px] font-medium text-[var(--text-secondary)]";
 
 export function Inspector() {
   const project = useProjectStore((s) => s.project);
@@ -25,6 +29,7 @@ export function Inspector() {
   const applyMotionTool = useProjectStore((s) => s.applyMotionTool);
   const ensureAnimation = useProjectStore((s) => s.ensureAnimation);
   const setPropertyAtPlayhead = useProjectStore((s) => s.setPropertyAtPlayhead);
+  const updateTextContent = useProjectStore((s) => s.updateTextContent);
   const setIntent = useProjectStore((s) => s.setIntent);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [motionsOpen, setMotionsOpen] = useState(true);
@@ -34,6 +39,7 @@ export function Inspector() {
   );
   const primary = selected[0];
   const duration = project.animation?.duration ?? 1200;
+  const iconSvg = project.icon?.svg ?? null;
 
   const selectedTracks = useMemo(() => {
     if (!project.animation || !primary) return [];
@@ -41,6 +47,12 @@ export function Inspector() {
       primary.elementIds.includes(t.elementId),
     );
   }, [project.animation, primary]);
+
+  const textNode = useMemo(() => {
+    if (!primary || primary.role !== "text" || !project.parsed) return null;
+    const id = primary.elementIds[0];
+    return project.parsed.elementMap[id] ?? null;
+  }, [primary, project.parsed]);
 
   const liveValues = useMemo(() => {
     if (!primary) {
@@ -96,9 +108,7 @@ export function Inspector() {
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-[#f7f7f7]">
       <section className="space-y-2.5 border-b border-[var(--border)] bg-white p-3">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-          Animation
-        </p>
+        <p className={sectionLabel}>Animation</p>
         {project.animation ? (
           <>
             <label className="block text-xs text-[var(--text-secondary)]">
@@ -158,40 +168,21 @@ export function Inspector() {
         )}
       </section>
 
-      <section className="space-y-1 border-b border-[var(--border)] bg-white p-3">
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-          Layers
-        </p>
-        {project.components.length === 0 && (
-          <p className="text-xs text-[var(--text-secondary)]">No components</p>
-        )}
-        {project.components.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => selectComponents([c.id])}
-            className={cn(
-              "flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
-              ui.selectedComponentIds.includes(c.id)
-                ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
-                : "text-[var(--text)] hover:bg-black/[0.03]",
-            )}
-          >
-            <span className="font-medium">{c.name}</span>
-            <span className="text-[10px] opacity-60 capitalize">{c.role}</span>
-          </button>
-        ))}
-      </section>
-
       <section className="border-b border-[var(--border)] bg-white p-3">
         <button
           type="button"
-          className="mb-2 flex w-full items-center justify-between text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]"
+          className={cn(
+            "mb-2 flex w-full items-center justify-between",
+            sectionLabel,
+          )}
           onClick={() => setMotionsOpen((v) => !v)}
         >
           Motions
           <ChevronDown
-            className={cn("h-3.5 w-3.5 transition-transform", motionsOpen && "rotate-180")}
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-150",
+              motionsOpen && "rotate-180",
+            )}
           />
         </button>
         {motionsOpen && (
@@ -214,13 +205,11 @@ export function Inspector() {
                       title={tool.description}
                       disabled={!project.components.length}
                       onClick={() => onMotion(tool.id)}
-                      className="rounded-lg border border-[var(--border)] bg-[#f7f7f7] px-2 py-2 text-left transition-colors hover:border-[#0f9f8a]/40 hover:bg-[#0f9f8a]/8 disabled:opacity-40"
+                      className="group rounded-lg border border-[var(--border)] bg-white px-2 py-2 text-left transition-colors hover:border-[#0f9f8a]/40 disabled:opacity-40"
                     >
-                      <span className="block text-[11px] font-medium text-black">
+                      <MotionDemo toolId={tool.id} iconSvg={iconSvg} />
+                      <span className="mt-1.5 block text-[11px] font-medium text-black">
                         {tool.label}
-                      </span>
-                      <span className="mt-0.5 block text-[10px] text-[var(--text-secondary)]">
-                        {tool.description}
                       </span>
                     </button>
                   ))}
@@ -234,9 +223,7 @@ export function Inspector() {
       {primary && (
         <section className="space-y-3 border-b border-[var(--border)] bg-white p-3">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-              Selected
-            </p>
+            <p className={sectionLabel}>Selected</p>
             <input
               className="mt-1.5 h-8 w-full rounded-lg border border-[var(--border)] px-2 text-sm font-medium"
               value={primary.name}
@@ -244,10 +231,51 @@ export function Inspector() {
             />
           </div>
 
+          {textNode && (
+            <div className="space-y-2">
+              <p className={sectionLabel}>Text</p>
+              <label className="block text-[11px] text-[var(--text-secondary)]">
+                Content
+                <input
+                  className="mt-1 h-8 w-full rounded-lg border border-[var(--border)] bg-white px-2 text-sm text-[var(--text)]"
+                  value={textNode.textContent ?? ""}
+                  onChange={(e) =>
+                    updateTextContent(primary.id, { content: e.target.value })
+                  }
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-[11px] text-[var(--text-secondary)]">
+                  Size
+                  <input
+                    type="number"
+                    step={0.5}
+                    className="mt-1 h-8 w-full rounded-lg border border-[var(--border)] bg-white px-2 text-sm"
+                    value={Number(textNode.attributes["font-size"] ?? 4)}
+                    onChange={(e) =>
+                      updateTextContent(primary.id, {
+                        fontSize: Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label className="block text-[11px] text-[var(--text-secondary)]">
+                  Fill
+                  <input
+                    type="color"
+                    className="mt-1 h-8 w-full cursor-pointer rounded-lg border border-[var(--border)] bg-white px-1"
+                    value={textNode.attributes.fill || "#171717"}
+                    onChange={(e) =>
+                      updateTextContent(primary.id, { fill: e.target.value })
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-              Transform
-            </p>
+            <p className={sectionLabel}>Transform</p>
             <div className="grid grid-cols-2 gap-2">
               <NumField label="Position X" value={liveValues.x} onChange={(v) => setProp("x", v)} />
               <NumField label="Position Y" value={liveValues.y} onChange={(v) => setProp("y", v)} />
@@ -288,9 +316,7 @@ export function Inspector() {
 
           {selectedTracks.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-                Keyframes
-              </p>
+              <p className={sectionLabel}>Keyframes</p>
               {selectedTracks.flatMap((t) =>
                 t.properties.flatMap((p) =>
                   p.keyframes.map((k) => (
@@ -337,7 +363,10 @@ export function Inspector() {
           >
             Advanced
             <ChevronDown
-              className={cn("h-3.5 w-3.5 transition-transform", advancedOpen && "rotate-180")}
+              className={cn(
+                "h-3.5 w-3.5 transition-transform duration-150",
+                advancedOpen && "rotate-180",
+              )}
             />
           </button>
           {advancedOpen && (

@@ -57,6 +57,8 @@ export interface SvgElementNode {
   originalId?: string;
   /** Parent group id if nested */
   parentId?: string;
+  /** Text content for <text> / <tspan> nodes */
+  textContent?: string;
 }
 
 export interface SvgComponent {
@@ -65,6 +67,7 @@ export interface SvgComponent {
   elementIds: string[];
   transformOrigin: TransformOrigin;
   locked?: boolean;
+  hidden?: boolean;
   role?: ComponentRole;
 }
 
@@ -86,6 +89,7 @@ export type ComponentRole =
   | "tray"
   | "glass"
   | "handle-bar"
+  | "text"
   | "other";
 
 export interface ParsedSvg {
@@ -179,13 +183,32 @@ export interface CreationHistoryEntry {
   name: string;
   iconName: string;
   prompt: string;
-  icon: IconSelection;
+  icon: IconSelection | null;
   parsed: ParsedSvg | null;
   components: SvgComponent[];
   plan: AnimationPlan | null;
   animation: AnimationDocument | null;
   conversation: ChatMessage[];
 }
+
+/** Export artboard around the animated icon — this is what leaves the editor. */
+export interface FrameSettings {
+  /** Outer frame size in CSS pixels at 100% zoom */
+  size: number;
+  /** Frame fill; use "transparent" for no fill */
+  background: string;
+  /** Corner radius in CSS pixels */
+  radius: number;
+  /** Inset padding between frame edge and icon */
+  padding: number;
+}
+
+export const DEFAULT_FRAME: FrameSettings = {
+  size: 128,
+  background: "#ffffff",
+  radius: 16,
+  padding: 32,
+};
 
 export interface ProjectState {
   id: string;
@@ -207,6 +230,7 @@ export interface ProjectState {
   strokeWidth: number;
   strokeColor: string;
   fillColor: string;
+  frame: FrameSettings;
 }
 
 export interface ElementTransform {

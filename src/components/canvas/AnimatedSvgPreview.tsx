@@ -28,49 +28,93 @@ function nodeProps(node: SvgElementNode) {
       "fill-rule": "fillRule",
       "clip-rule": "clipRule",
       "vector-effect": "vectorEffect",
+      "font-size": "fontSize",
+      "font-family": "fontFamily",
+      "font-weight": "fontWeight",
+      "text-anchor": "textAnchor",
+      "dominant-baseline": "dominantBaseline",
+      "letter-spacing": "letterSpacing",
     };
     attrs[map[key] ?? key] = value;
   }
   return attrs;
 }
 
+function isIdentityTransform(t: ElementTransform): boolean {
+  return (
+    t.x === 0 &&
+    t.y === 0 &&
+    t.rotation === 0 &&
+    t.scaleX === 1 &&
+    t.scaleY === 1 &&
+    t.skewX === 0 &&
+    t.skewY === 0
+  );
+}
+
 function AnimatedNode({
   node,
   transforms,
   selectedIds,
+  originX,
+  originY,
 }: {
   node: SvgElementNode;
   transforms: Record<string, ElementTransform>;
   selectedIds: Set<string>;
+  originX: number;
+  originY: number;
 }) {
-  const t = transforms[node.id] ?? DEFAULT_TRANSFORM;
+  const hasTrack = Object.prototype.hasOwnProperty.call(transforms, node.id);
+  const t = hasTrack ? transforms[node.id] : DEFAULT_TRANSFORM;
   const origin = t.transformOrigin;
-  const ox = origin.absolute ? origin.x : 12;
-  const oy = origin.absolute ? origin.y : 12;
-  const transform = transformToSvgAttribute(t, ox, oy);
+  const ox = origin.absolute ? origin.x : originX;
+  const oy = origin.absolute ? origin.y : originY;
+  // Preserve original SVG transform attributes when we are not animating this node
+  const animatedTransform =
+    hasTrack && !isIdentityTransform(t)
+      ? transformToSvgAttribute(t, ox, oy)
+      : hasTrack
+        ? transformToSvgAttribute(t, ox, oy)
+        : undefined;
   const selected = selectedIds.has(node.id);
+  const base = nodeProps(node);
   const common = {
-    ...nodeProps(node),
+    ...base,
     "data-animator-id": node.id,
-    transform,
-    opacity: t.opacity,
+    ...(animatedTransform
+      ? {
+          transform: base.transform
+            ? `${animatedTransform} ${base.transform}`
+            : animatedTransform,
+        }
+      : {}),
+    ...(hasTrack ? { opacity: t.opacity } : {}),
     ...(t.fill ? { fill: t.fill } : {}),
     ...(t.stroke ? { stroke: t.stroke } : {}),
     ...(t.strokeWidth !== undefined ? { strokeWidth: t.strokeWidth } : {}),
-    style: selected
-      ? { outline: "1px solid var(--accent)", outlineOffset: 2 }
-      : undefined,
+    style: {
+      cursor: "pointer",
+      pointerEvents: "all" as const,
+      ...(selected
+        ? {
+            filter: "url(#animator-selection-glow)",
+          }
+        : {}),
+    },
   };
 
   if (node.tag === "g") {
     return (
-      <g {...common}>
+      <g {...common} style={{ cursor: "pointer", pointerEvents: "all" }}>
         {node.children.map((child) => (
           <AnimatedNode
             key={child.id}
             node={child}
             transforms={transforms}
             selectedIds={selectedIds}
+            originX={originX}
+            originY={originY}
           />
         ))}
       </g>
@@ -84,6 +128,27 @@ function AnimatedNode({
   if (node.tag === "line") return <line {...common} />;
   if (node.tag === "polyline") return <polyline {...common} />;
   if (node.tag === "polygon") return <polygon {...common} />;
+  if (node.tag === "text") {
+    return (
+      <text {...common} style={{ ...common.style, pointerEvents: "all" }}>
+        {node.children.length
+          ? node.children.map((child) => (
+              <AnimatedNode
+                key={child.id}
+                node={child}
+                transforms={transforms}
+                selectedIds={selectedIds}
+                originX={originX}
+                originY={originY}
+              />
+            ))
+          : node.textContent}
+      </text>
+    );
+  }
+  if (node.tag === "tspan") {
+    return <tspan {...common}>{node.textContent}</tspan>;
+  }
   return null;
 }
 
@@ -103,6 +168,10 @@ export function AnimatedSvgPreview({
   onSelectElement: (elementId: string | null) => void;
 }) {
   const selectedIds = new Set(selectedElementIds);
+  const vb = parsed.viewBox.split(/[\s,]+/).map(Number);
+  const originX = (vb[0] || 0) + (vb[2] || 24) / 2;
+  const originY = (vb[1] || 0) + (vb[3] || 24) / 2;
+
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -112,18 +181,45 @@ export function AnimatedSvgPreview({
       overflow="visible"
       style={{ color, overflow: "visible", maxWidth: "none" }}
       className="block select-none overflow-visible"
+      data-testid="animated-svg-preview"
       onClick={(e) => {
+        e.stopPropagation();
         const target = e.target as Element;
-        const id = target.closest("[data-animator-id]")?.getAttribute("data-animator-id");
+        if (target === e.currentTarget) {
+          onSelectElement(null);
+          return;
+        }
+        const id = target
+          .closest("[data-animator-id]")
+          ?.getAttribute("data-animator-id");
         onSelectElement(id ?? null);
       }}
     >
+      <defs>
+        <filter
+          id="animator-selection-glow"
+          x="-20%"
+          y="-20%"
+          width="140%"
+          height="140%"
+        >
+          <feDropShadow
+            dx="0"
+            dy="0"
+            stdDeviation="0.6"
+            floodColor="#0f9f8a"
+            floodOpacity="0.95"
+          />
+        </filter>
+      </defs>
       {parsed.elements.map((node) => (
         <AnimatedNode
           key={node.id}
           node={node}
           transforms={transforms}
           selectedIds={selectedIds}
+          originX={originX}
+          originY={originY}
         />
       ))}
     </svg>

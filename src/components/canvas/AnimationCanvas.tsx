@@ -9,9 +9,9 @@ import {
   ZoomOut,
 } from "lucide-react";
 import {
-  ICON_SIZE_DEFAULT,
   useProjectStore,
 } from "@/store/project-store";
+import { DEFAULT_FRAME } from "@/lib/animation/types";
 import { sampleAnimationAt } from "@/lib/animation/engine";
 import { AnimatedSvgPreview } from "@/components/canvas/AnimatedSvgPreview";
 import { Button } from "@/components/ui/button";
@@ -23,14 +23,17 @@ export function AnimationCanvas() {
   const setPlaying = useProjectStore((s) => s.setPlaying);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const setZoom = useProjectStore((s) => s.setZoom);
-  const setCanvasBg = useProjectStore((s) => s.setCanvasBg);
-  const selectComponents = useProjectStore((s) => s.selectComponents);
+  const selectCanvasElement = useProjectStore((s) => s.selectCanvasElement);
   const raf = useRef<number>(0);
   const last = useRef<number>(0);
   const timeRef = useRef(ui.currentTime);
 
   const duration = Math.max(project.animation?.duration ?? 1000, 1);
-  const displaySize = Math.round((project.iconSize || ICON_SIZE_DEFAULT) * ui.zoom);
+  const frame = project.frame ?? DEFAULT_FRAME;
+  const frameDisplay = Math.round(frame.size * ui.zoom);
+  const padDisplay = Math.round(frame.padding * ui.zoom);
+  const iconDisplay = Math.max(16, frameDisplay - padDisplay * 2);
+  const radiusDisplay = Math.round(frame.radius * ui.zoom);
 
   useEffect(() => {
     timeRef.current = ui.currentTime;
@@ -82,24 +85,25 @@ export function AnimationCanvas() {
   }, [project.animation, ui.currentTime, origins]);
 
   const selectedElementIds = useMemo(() => {
+    if (ui.selectedElementIds.length) return ui.selectedElementIds;
     return project.components
       .filter((c) => ui.selectedComponentIds.includes(c.id))
       .flatMap((c) => c.elementIds);
-  }, [project.components, ui.selectedComponentIds]);
+  }, [project.components, ui.selectedComponentIds, ui.selectedElementIds]);
 
-  const bgClass =
-    ui.canvasBg === "canvas"
-      ? "canvas-surface"
-      : ui.canvasBg === "transparent"
-        ? "bg-transparent"
-        : "bg-white";
+  const frameBg =
+    !frame.background || frame.background === "transparent"
+      ? "transparent"
+      : frame.background;
 
   return (
     <div
-      className={cn("relative flex h-full min-h-0 flex-col overflow-hidden", bgClass)}
+      className={cn(
+        "relative flex h-full min-h-0 flex-col overflow-hidden canvas-surface",
+      )}
       data-testid="animation-canvas"
     >
-      {/* Floating compact toolbar */}
+      {/* Floating compact toolbar — no canvas color picker */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 px-3">
         <div className="pointer-events-auto floating-toolbar flex items-center gap-0.5 px-1.5 py-1">
           <Button
@@ -149,47 +153,42 @@ export function AnimationCanvas() {
           >
             <ZoomIn className="h-3.5 w-3.5" />
           </Button>
-          <div className="mx-1 h-4 w-px bg-[var(--border)]" />
-          <select
-            className="h-7 rounded-md border-0 bg-transparent px-1.5 text-[11px] text-[var(--text-secondary)] outline-none"
-            value={ui.canvasBg}
-            onChange={(e) => setCanvasBg(e.target.value as typeof ui.canvasBg)}
-            aria-label="Preview background"
-          >
-            <option value="canvas">Canvas</option>
-            <option value="white">White</option>
-            <option value="transparent">Clear</option>
-          </select>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 pt-14 pb-4">
         {!project.parsed ? (
           <div className="max-w-xs text-center">
-            <p className="text-sm font-medium text-[var(--text)]">Choose an icon</p>
+            <p className="text-sm font-medium text-[var(--text)]">
+              Choose an icon or add text
+            </p>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Search the library to start animating.
+              Use icon only, text only, or combine both.
             </p>
           </div>
         ) : (
-          <div className="icon-stage" data-testid="icon-stage">
-            <AnimatedSvgPreview
-              parsed={project.parsed}
-              transforms={sampled.elements}
-              selectedElementIds={selectedElementIds}
-              size={displaySize}
-              color={project.strokeColor}
-              onSelectElement={(id) => {
-                if (!id) {
-                  selectComponents([]);
-                  return;
-                }
-                const cmp = project.components.find((c) =>
-                  c.elementIds.includes(id),
-                );
-                if (cmp) selectComponents([cmp.id]);
-              }}
-            />
+          <div
+            className="export-frame"
+            data-testid="export-frame"
+            style={{
+              width: frameDisplay,
+              height: frameDisplay,
+              borderRadius: radiusDisplay,
+              background: frameBg,
+              padding: padDisplay,
+            }}
+            title="Export frame"
+          >
+            <div className="flex h-full w-full items-center justify-center">
+              <AnimatedSvgPreview
+                parsed={project.parsed}
+                transforms={sampled.elements}
+                selectedElementIds={selectedElementIds}
+                size={iconDisplay}
+                color={project.strokeColor}
+                onSelectElement={(id) => selectCanvasElement(id)}
+              />
+            </div>
           </div>
         )}
       </div>

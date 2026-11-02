@@ -6,9 +6,13 @@ export async function GET(req: Request) {
   const q = searchParams.get("q") ?? "";
   const library = (searchParams.get("library") ?? "all") as LibraryId | "all";
   const limit = Number(searchParams.get("limit") ?? 100);
+  const offset = Number(searchParams.get("offset") ?? 0);
   try {
-    const icons = await searchIcons(q, library, limit);
-    return NextResponse.json({ icons });
+    const icons = await searchIcons(q, library, limit, offset);
+    return NextResponse.json({
+      icons,
+      hasMore: icons.length >= limit,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Search failed", icons: [] },
