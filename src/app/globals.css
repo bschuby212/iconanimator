@@ -90,13 +90,19 @@ body {
   border-radius: 10px;
 }
 
-/* Playhead / time scrubber */
+/* Playhead / time scrubber — brand green, never browser-default blue */
 .timeline-scrubber {
   -webkit-appearance: none;
   appearance: none;
   height: 6px;
   border-radius: 999px;
-  background: #e5e5e5;
+  background: linear-gradient(
+    to right,
+    #0f9f8a 0%,
+    #0f9f8a var(--scrub-pct, 0%),
+    #e5e5e5 var(--scrub-pct, 0%),
+    #e5e5e5 100%
+  );
   outline: none;
   cursor: pointer;
   accent-color: #0f9f8a;
@@ -108,7 +114,7 @@ body {
 .timeline-scrubber::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
-  background: #e5e5e5;
+  background: transparent;
 }
 .timeline-scrubber::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -119,21 +125,26 @@ body {
   border-radius: 50%;
   background: #0f9f8a;
   border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(15, 159, 138, 0.35);
+  box-shadow: 0 0 0 1px rgba(15, 159, 138, 0.45);
   cursor: grab;
 }
 .timeline-scrubber::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background: #e5e5e5;
+  background: transparent;
+}
+.timeline-scrubber::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #0f9f8a;
 }
 .timeline-scrubber::-moz-range-thumb {
   width: 14px;
   height: 14px;
+  border: 2px solid #fff;
   border-radius: 50%;
   background: #0f9f8a;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(15, 159, 138, 0.35);
+  box-shadow: 0 0 0 1px rgba(15, 159, 138, 0.45);
   cursor: grab;
 }
 

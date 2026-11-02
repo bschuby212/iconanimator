@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import {
-  Pause,
-  Play,
-  RotateCcw,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { ZoomIn, ZoomOut } from "lucide-react";
 import {
   useProjectStore,
 } from "@/store/project-store";
@@ -103,35 +97,9 @@ export function AnimationCanvas() {
       )}
       data-testid="animation-canvas"
     >
-      {/* Floating compact toolbar — no canvas color picker */}
+      {/* Floating zoom-only mini menu — playback lives in the bottom timeline */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 px-3">
         <div className="pointer-events-auto floating-toolbar flex items-center gap-0.5 px-1.5 py-1">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-            onClick={() => setPlaying(!ui.playing)}
-            disabled={!project.animation}
-            title={ui.playing ? "Pause" : "Play"}
-            data-testid="play-toggle"
-          >
-            {ui.playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-            onClick={() => {
-              setCurrentTime(0);
-              setPlaying(true);
-            }}
-            disabled={!project.animation}
-            title="Restart"
-            data-testid="restart-preview"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </Button>
-          <div className="mx-1 h-4 w-px bg-[var(--border)]" />
           <Button
             size="icon"
             variant="ghost"

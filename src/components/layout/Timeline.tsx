@@ -139,6 +139,7 @@ export function Timeline() {
           disabled={!hasAnim}
           onChange={(e) => onSliderChange(Number(e.target.value))}
           className="timeline-scrubber min-w-[120px] flex-1"
+          style={{ ["--scrub-pct" as string]: `${progress * 100}%` }}
           aria-label="Scrub timeline"
           data-testid="timeline-scrubber"
         />
