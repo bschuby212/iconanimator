@@ -13,10 +13,10 @@ import { exportCssAnimation } from "@/lib/export/css";
 import { exportLottieJson } from "@/lib/export/lottie";
 
 const FORMATS: { id: ExportFormat; label: string; priority: number }[] = [
-  { id: "react", label: "React component", priority: 1 },
-  { id: "svg", label: "Animated SVG", priority: 2 },
-  { id: "css", label: "CSS animation", priority: 3 },
-  { id: "lottie", label: "Lottie JSON", priority: 4 },
+  { id: "lottie", label: "Lottie JSON", priority: 1 },
+  { id: "react", label: "React component", priority: 2 },
+  { id: "svg", label: "Animated SVG", priority: 3 },
+  { id: "css", label: "CSS animation", priority: 4 },
   { id: "gif", label: "GIF", priority: 5 },
   { id: "mp4", label: "MP4", priority: 6 },
   { id: "webm", label: "WebM", priority: 7 },
@@ -27,7 +27,7 @@ export function ExportDialog() {
   const open = useProjectStore((s) => s.ui.exportOpen);
   const setExportOpen = useProjectStore((s) => s.setExportOpen);
   const project = useProjectStore((s) => s.project);
-  const [format, setFormat] = useState<ExportFormat>("react");
+  const [format, setFormat] = useState<ExportFormat>("lottie");
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 

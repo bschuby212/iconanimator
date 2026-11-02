@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Check,
   Download,
+  FilePlus,
   History,
   MoreHorizontal,
   PanelLeft,
@@ -265,13 +266,26 @@ export function AppShell() {
           </div>
           <Button
             size="sm"
+            variant="ghost"
+            className="ml-1"
+            onClick={() => newProject()}
+            data-testid="new-file-cta"
+            title="New file"
+          >
+            <FilePlus className="h-3.5 w-3.5" />
+            New file
+          </Button>
+          <Button
+            size="sm"
             variant="primary"
             className="ml-1"
             disabled={!project.animation}
             onClick={() => setExportOpen(true)}
+            data-testid="export-cta"
+            title="Export Lottie JSON"
           >
             <Download className="h-3.5 w-3.5" />
-            Export
+            Export Lottie
           </Button>
           <Button
             size="sm"
