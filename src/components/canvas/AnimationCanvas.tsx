@@ -103,7 +103,7 @@ export function AnimationCanvas() {
       )}
       data-testid="animation-canvas"
     >
-      {/* Floating compact toolbar — no canvas color picker */}
+      {/* Floating compact toolbar — playback + time scrubber + zoom */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 px-3">
         <div className="pointer-events-auto floating-toolbar flex items-center gap-0.5 px-1.5 py-1">
           <Button
@@ -113,6 +113,7 @@ export function AnimationCanvas() {
             onClick={() => setPlaying(!ui.playing)}
             disabled={!project.animation}
             title={ui.playing ? "Pause" : "Play"}
+            aria-label={ui.playing ? "Pause" : "Play"}
             data-testid="play-toggle"
           >
             {ui.playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -127,11 +128,32 @@ export function AnimationCanvas() {
             }}
             disabled={!project.animation}
             title="Restart"
+            aria-label="Restart"
             data-testid="restart-preview"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
-          <div className="mx-1 h-4 w-px bg-[var(--border)]" />
+          <div className="mx-1 flex min-w-[140px] max-w-[220px] flex-1 items-center gap-1.5 px-1">
+            <input
+              type="range"
+              min={0}
+              max={duration}
+              step={1}
+              value={Math.min(ui.currentTime, duration)}
+              disabled={!project.animation}
+              onChange={(e) => {
+                setCurrentTime(Number(e.target.value));
+                setPlaying(false);
+              }}
+              className="timeline-scrubber w-[120px] sm:w-[160px]"
+              aria-label="Scrub animation time"
+              data-testid="canvas-scrubber"
+            />
+            <span className="w-10 shrink-0 text-[10px] tabular-nums text-[var(--text-secondary)]">
+              {(ui.currentTime / 1000).toFixed(1)}s
+            </span>
+          </div>
+          <div className="mx-0.5 h-4 w-px bg-[var(--border)]" />
           <Button
             size="icon"
             variant="ghost"
