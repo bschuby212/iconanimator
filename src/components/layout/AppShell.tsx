@@ -97,9 +97,15 @@ export function AppShell() {
           <PanelLeft className="h-4 w-4" />
         </button>
         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#0f9f8a] text-[10px] font-bold text-white">
-            Ai
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/app-logo.png"
+            alt="Icon Animator"
+            width={24}
+            height={24}
+            className="h-6 w-6 shrink-0 rounded-[6px]"
+            draggable={false}
+          />
           {editingTitle ? (
             <div className="flex min-w-0 items-center gap-1">
               <input
