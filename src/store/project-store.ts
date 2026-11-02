@@ -100,8 +100,14 @@ interface Store {
   addTextLayer: (content?: string) => void;
   updateTextContent: (
     componentId: string,
-    patch: { content?: string; fontSize?: number; fill?: string },
+    patch: {
+      content?: string;
+      fontSize?: number;
+      fill?: string;
+      fontWeight?: string | number;
+    },
   ) => void;
+  removeTextLayers: () => void;
   clearIconKeepText: () => void;
   groupSelected: (name: string) => void;
   ungroup: (componentId: string) => void;
@@ -478,6 +484,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         x: String(vbW / 2),
         y: String(project.parsed ? vbH + 10 : vbH / 2 + fontSize / 3),
         "font-size": String(fontSize),
+        "font-weight": "400",
         "font-family": "ui-sans-serif, system-ui, sans-serif",
         "text-anchor": "middle",
         fill: project.strokeColor || "#171717",
@@ -598,6 +605,9 @@ export const useProjectStore = create<Store>((set, get) => ({
       if (patch.fill !== undefined) {
         next.attributes.fill = patch.fill;
       }
+      if (patch.fontWeight !== undefined) {
+        next.attributes["font-weight"] = String(patch.fontWeight);
+      }
       elementMap[el.id] = next;
       return next;
     });
@@ -613,6 +623,40 @@ export const useProjectStore = create<Store>((set, get) => ({
                   : c,
               )
             : project.components,
+      },
+    });
+  },
+
+  removeTextLayers: () => {
+    const { project, ui } = get();
+    if (!project.parsed) return;
+    const textIds = new Set(
+      project.components
+        .filter((c) => c.role === "text")
+        .flatMap((c) => c.elementIds),
+    );
+    if (!textIds.size) return;
+
+    const elements = project.parsed.elements.filter((el) => !textIds.has(el.id));
+    const elementMap = { ...project.parsed.elementMap };
+    for (const id of textIds) delete elementMap[id];
+    const components = project.components.filter((c) => c.role !== "text");
+    const stillHasContent = components.length > 0 || !!project.icon;
+
+    set({
+      project: {
+        ...project,
+        parsed: stillHasContent
+          ? { ...project.parsed, elements, elementMap }
+          : null,
+        components,
+      },
+      ui: {
+        ...ui,
+        selectedComponentIds: ui.selectedComponentIds.filter(
+          (id) => components.some((c) => c.id === id),
+        ),
+        selectedElementIds: ui.selectedElementIds.filter((id) => !textIds.has(id)),
       },
     });
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { Type, ZoomIn, ZoomOut } from "lucide-react";
+import { Trash2, Type, ZoomIn, ZoomOut } from "lucide-react";
 import {
   useProjectStore,
 } from "@/store/project-store";
@@ -11,6 +11,12 @@ import { AnimatedSvgPreview } from "@/components/canvas/AnimatedSvgPreview";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 
+const TEXT_WEIGHTS = [
+  { value: "400", label: "Regular" },
+  { value: "500", label: "Medium" },
+  { value: "700", label: "Bold" },
+] as const;
+
 export function AnimationCanvas() {
   const project = useProjectStore((s) => s.project);
   const ui = useProjectStore((s) => s.ui);
@@ -18,6 +24,8 @@ export function AnimationCanvas() {
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const setZoom = useProjectStore((s) => s.setZoom);
   const addTextLayer = useProjectStore((s) => s.addTextLayer);
+  const updateTextContent = useProjectStore((s) => s.updateTextContent);
+  const removeTextLayers = useProjectStore((s) => s.removeTextLayers);
   const selectCanvasElement = useProjectStore((s) => s.selectCanvasElement);
   const raf = useRef<number>(0);
   const last = useRef<number>(0);
@@ -29,6 +37,18 @@ export function AnimationCanvas() {
   const padDisplay = Math.round(frame.padding * ui.zoom);
   const iconDisplay = Math.max(16, frameDisplay - padDisplay * 2);
   const radiusDisplay = Math.round(frame.radius * ui.zoom);
+
+  const textComponent = useMemo(
+    () => project.components.find((c) => c.role === "text") ?? null,
+    [project.components],
+  );
+  const textNode = useMemo(() => {
+    if (!textComponent || !project.parsed) return null;
+    const id = textComponent.elementIds[0];
+    return id ? project.parsed.elementMap[id] ?? null : null;
+  }, [textComponent, project.parsed]);
+  const textSize = Number(textNode?.attributes["font-size"] ?? 4);
+  const textWeight = textNode?.attributes["font-weight"] ?? "400";
 
   useEffect(() => {
     timeRef.current = ui.currentTime;
@@ -123,18 +143,76 @@ export function AnimationCanvas() {
             <ZoomIn className="h-3.5 w-3.5" />
           </Button>
           <div className="mx-0.5 h-4 w-px bg-[var(--border)]" />
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 gap-1 px-2 text-[12px] font-medium"
-            onClick={() => addTextLayer("Label")}
-            title="Add text"
-            aria-label="Add text"
-            data-testid="canvas-add-text"
-          >
-            <Type className="h-3.5 w-3.5" />
-            Add text
-          </Button>
+          {!textComponent || !textNode ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1 px-2 text-[12px] font-medium"
+              onClick={() => addTextLayer("Label")}
+              title="Add text"
+              aria-label="Add text"
+              data-testid="canvas-add-text"
+            >
+              <Type className="h-3.5 w-3.5" />
+              Add text
+            </Button>
+          ) : (
+            <div
+              className="flex items-center gap-1"
+              data-testid="canvas-text-controls"
+            >
+              <label className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)]">
+                <span className="sr-only sm:not-sr-only sm:inline">Size</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={24}
+                  step={0.5}
+                  value={Number.isFinite(textSize) ? textSize : 4}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    updateTextContent(textComponent.id, { fontSize: n });
+                  }}
+                  className="h-7 w-12 rounded-md border border-[var(--border)] bg-white px-1.5 text-right text-[12px] tabular-nums text-[var(--text)] outline-none focus:border-[#0f9f8a]/50"
+                  aria-label="Text size"
+                  data-testid="canvas-text-size"
+                />
+              </label>
+              <select
+                value={
+                  TEXT_WEIGHTS.some((w) => w.value === String(textWeight))
+                    ? String(textWeight)
+                    : "400"
+                }
+                onChange={(e) =>
+                  updateTextContent(textComponent.id, {
+                    fontWeight: e.target.value,
+                  })
+                }
+                className="h-7 rounded-md border border-[var(--border)] bg-white px-1.5 text-[12px] text-[var(--text)] outline-none focus:border-[#0f9f8a]/50"
+                aria-label="Font weight"
+                data-testid="canvas-text-weight"
+              >
+                {TEXT_WEIGHTS.map((w) => (
+                  <option key={w.value} value={w.value}>
+                    {w.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-[var(--text-secondary)] hover:text-red-600"
+                onClick={() => removeTextLayers()}
+                title="Remove text"
+                aria-label="Remove text"
+                data-testid="canvas-remove-text"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
