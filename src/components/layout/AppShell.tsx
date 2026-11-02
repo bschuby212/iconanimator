@@ -8,6 +8,7 @@ import {
   History,
   MoreHorizontal,
   PanelLeft,
+  Pencil,
   Redo2,
   Undo2,
   X,
@@ -19,7 +20,6 @@ import { Timeline } from "@/components/layout/Timeline";
 import { ExportDialog } from "@/components/export/ExportDialog";
 import { HistoryModal } from "@/components/layout/HistoryModal";
 import { Button } from "@/components/ui/button";
-import { WritingEditButton } from "@/components/ui/WritingEditButton";
 import { useProjectStore } from "@/store/project-store";
 import { listProjects, loadProject } from "@/lib/persistence/db";
 import { cn } from "@/lib/utils/cn";
@@ -159,19 +159,23 @@ export function AppShell() {
               </button>
             </div>
           ) : (
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-1">
               <span className="truncate text-sm font-medium text-[var(--text)]">
                 {project.name || "Untitled animation"}
               </span>
-              <WritingEditButton
-                title="Rename project"
+              <button
+                type="button"
+                className="shrink-0 rounded-md p-1 text-[var(--text-secondary)] transition-colors hover:bg-black/[0.04] hover:text-[var(--text)]"
+                title="Rename"
                 aria-label="Rename project"
                 onClick={() => {
                   setTitleDraft(project.name);
                   setEditingTitle(true);
                   requestAnimationFrame(() => titleInputRef.current?.focus());
                 }}
-              />
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
             </div>
           )}
         </div>

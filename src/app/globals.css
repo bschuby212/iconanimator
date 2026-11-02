@@ -90,25 +90,6 @@ body {
   border-radius: 10px;
 }
 
-/* Writing Edit button — pencil scribbles the label in */
-.writing-edit-btn .writing-edit-letter {
-  transform-origin: bottom left;
-}
-
-.writing-edit-btn .writing-edit-pencil--active {
-  filter: drop-shadow(0 0 2px rgba(15, 159, 138, 0.35));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .writing-edit-btn .writing-edit-letter {
-    transition: none !important;
-    opacity: 1 !important;
-  }
-  .writing-edit-btn .writing-edit-pencil {
-    transition: none !important;
-  }
-}
-
 /* Subtle AI sparkle avatar (replaces "AI" word mark in chat) */
 .ai-sparkle-avatar {
   background: rgba(15, 159, 138, 0.12);

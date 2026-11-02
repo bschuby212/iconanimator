@@ -1,7 +1,12 @@
 # Edit Button Writing Pencil — issues & fixes
 
 Plugin id: `8b7d1fb1-6876-4e6b-8449-e95b89dff1fa`  
-Try in a new file: https://www.figma.com/file/new?try-tool-resource-content-id=8b7d1fb1-6876-4e6b-8449-e95b89dff1fa&try-tool-resource-type=gen_tool&type=design&mode=design
+Canvas file: https://www.figma.com/design/dXdhzVszHFcvU6AsbIBmiQ  
+Demo video (no Figma required): `/opt/cursor/artifacts/writing_edit_button_on_canvas.mp4`
+
+## Deliverable correction
+
+An early attempt put a writing Edit control in the app **header**. That was wrong — the motion belongs **on the canvas**, as if you ran the tool yourself. That header control was removed. The canvas build uses TextStagger typewriter + pencil keyframes + ink path trim, then `export_video`.
 
 ## Issues encountered
 
