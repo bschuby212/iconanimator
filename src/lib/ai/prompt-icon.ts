@@ -140,6 +140,52 @@ function stripLibraryWords(prompt: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+/** Pronouns / deixis that refer to the already-selected icon — not a library query */
+const ICON_QUERY_STOPWORDS = new Set([
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "its",
+  "my",
+  "our",
+  "your",
+  "current",
+  "selected",
+  "active",
+  "same",
+  "existing",
+  "above",
+  "below",
+  "here",
+  "there",
+  "one",
+  "ones",
+  "icon",
+  "icons",
+  "svg",
+  "animation",
+  "animate",
+  "motion",
+  "please",
+  "just",
+  "only",
+  "also",
+  "then",
+  "into",
+  "onto",
+]);
+
+function isUsableIconQuery(raw: string | null | undefined): raw is string {
+  if (!raw) return false;
+  const token = raw.trim().toLowerCase();
+  if (token.length < 2) return false;
+  if (ICON_QUERY_STOPWORDS.has(token)) return false;
+  if (LIBRARY_PATTERNS.some((l) => l.re.test(token))) return false;
+  return true;
+}
+
 function extractIconQuery(prompt: string): string | null {
   const p = prompt.trim();
 
@@ -147,18 +193,22 @@ function extractIconQuery(prompt: string): string | null {
   const prefixed = p.match(
     /\b(?:tabler|lucide|feather|heroicons|ph|phosphor|iconoir|bi|bootstrap|material-symbols|material)\s*:\s*([\w-]+)/i,
   );
-  if (prefixed?.[1]) return normalizeIconName(prefixed[1]);
+  if (prefixed?.[1] && isUsableIconQuery(prefixed[1])) {
+    return normalizeIconName(prefixed[1]);
+  }
 
   const atForm = p.match(
     /\b([\w-]+)\s*@\s*(?:tabler|lucide|feather|heroicons|ph|phosphor|iconoir|bi|bootstrap|material-symbols|material)\b/i,
   );
-  if (atForm?.[1]) return normalizeIconName(atForm[1]);
+  if (atForm?.[1] && isUsableIconQuery(atForm[1])) {
+    return normalizeIconName(atForm[1]);
+  }
 
-  // "settings icon" / "the settings icon"
+  // "settings icon" / "the settings icon" — ignore "this/that icon"
   const iconNoun = p.match(
     /\b(?:the\s+)?([a-z][\w-]{1,32})\s+icons?\b/i,
   );
-  if (iconNoun?.[1] && !LIBRARY_PATTERNS.some((l) => l.re.test(iconNoun[1]))) {
+  if (iconNoun?.[1] && isUsableIconQuery(iconNoun[1])) {
     return normalizeIconName(iconNoun[1]);
   }
 
@@ -166,7 +216,7 @@ function extractIconQuery(prompt: string): string | null {
   const iconCalled = p.match(
     /\bicons?\s+(?:called\s+|named\s+|for\s+)?([a-z][\w-]{1,32})\b/i,
   );
-  if (iconCalled?.[1] && !LIBRARY_PATTERNS.some((l) => l.re.test(iconCalled[1]))) {
+  if (iconCalled?.[1] && isUsableIconQuery(iconCalled[1])) {
     return normalizeIconName(iconCalled[1]);
   }
 
@@ -224,7 +274,17 @@ function hasMotionIntent(prompt: string): boolean {
 }
 
 function wantsIconLoad(prompt: string, iconQuery: string | null): boolean {
-  if (!iconQuery) return false;
+  if (!isUsableIconQuery(iconQuery)) return false;
+  // "this icon" / "the selected icon" refers to canvas selection — do not reload
+  if (
+    /\b(?:this|that|the\s+(?:selected|current|active)|my|our)\s+icons?\b/i.test(
+      prompt,
+    ) &&
+    !ICON_ACTION_RE.test(prompt) &&
+    !LIBRARY_PATTERNS.some((l) => l.re.test(prompt))
+  ) {
+    return false;
+  }
   if (ICON_ACTION_RE.test(prompt)) return true;
   if (/\bicons?\b/i.test(prompt)) return true;
   if (LIBRARY_PATTERNS.some((l) => l.re.test(prompt))) return true;

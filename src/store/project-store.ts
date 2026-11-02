@@ -987,8 +987,16 @@ export const useProjectStore = create<Store>((set, get) => ({
       return;
     }
     const userMsg = createUserMessage(message);
+    const before = project.animation;
     const refined = refineAnimation(project.animation, message);
-    const assistant = createAssistantMessage("Updated.");
+    const changed =
+      refined.duration !== before.duration ||
+      JSON.stringify(refined.tracks) !== JSON.stringify(before.tracks);
+    const assistant = createAssistantMessage(
+      changed
+        ? "Updated the animation from your instruction."
+        : "I couldn't map that to a concrete change — try being specific about duration, direction, scale, or which property to remove.",
+    );
     const conversation = [...project.conversation, userMsg, assistant];
     const hist = pushHistory(project, refined);
     const creationHistory = upsertCreation(project, {

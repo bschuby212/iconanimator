@@ -38,6 +38,287 @@ function styleEasing(style: MotionStyle): "easeInOut" | "easeOut" | "spring" | "
   }
 }
 
+/** Parse explicit duration from natural language ("2 seconds", "1.5s", "2000ms"). */
+export function parseDurationMs(prompt: string): number | null {
+  const p = prompt.toLowerCase();
+  const ms = p.match(/(\d+(?:\.\d+)?)\s*(?:ms|millis(?:econds?)?)\b/);
+  if (ms) {
+    const n = Number(ms[1]);
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
+  const sec = p.match(
+    /(?:last|lasts|over|in|to|for|down to|up to)?\s*(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/,
+  );
+  if (sec) {
+    const n = Number(sec[1]);
+    if (Number.isFinite(n) && n > 0) return Math.round(n * 1000);
+  }
+  return null;
+}
+
+/**
+ * Parse a peak scale factor from prompts like "120%", "to 110 percent", "1.2x".
+ * Ignores bare 100% (return-to-original) so peak detection stays accurate.
+ */
+export function parseScalePeak(prompt: string): number | null {
+  const p = prompt.toLowerCase();
+  const percents = [...p.matchAll(/(\d+(?:\.\d+)?)\s*%/g)].map((m) => Number(m[1]));
+  const nonIdentity = percents.filter((n) => Number.isFinite(n) && Math.abs(n - 100) > 0.5);
+  if (nonIdentity.length) {
+    // Prefer the largest mentioned non-100% scale (peak)
+    const peak = Math.max(...nonIdentity);
+    if (peak > 0 && peak <= 400) return peak / 100;
+  }
+  const words = p.match(
+    /(?:to|at|by|up to|increasing to|increase(?:s|d|ing)?(?:\s+(?:its|the)?\s+size(?:\s+to)?)?)\s*(\d+(?:\.\d+)?)\s*(?:percent|pct)\b/,
+  );
+  if (words) {
+    const n = Number(words[1]);
+    if (Number.isFinite(n) && n > 0 && Math.abs(n - 100) > 0.5) return n / 100;
+  }
+  const mult = p.match(/\b(\d+(?:\.\d+)?)\s*x\b/);
+  if (mult) {
+    const n = Number(mult[1]);
+    if (Number.isFinite(n) && n > 0 && Math.abs(n - 1) > 0.005 && n <= 4) return n;
+  }
+  return null;
+}
+
+export function wantsScaleMotion(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  if (parseScalePeak(p) != null) return true;
+  return (
+    p.includes("grow") ||
+    p.includes("scale") ||
+    p.includes("bigger") ||
+    p.includes("shrink") ||
+    p.includes("pulse") ||
+    /\bsize\b/.test(p) ||
+    p.includes("enlarge") ||
+    p.includes("smaller")
+  );
+}
+
+export function isCounterclockwise(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  return (
+    p.includes("counterclockwise") ||
+    p.includes("counter-clockwise") ||
+    p.includes("anticlockwise") ||
+    p.includes("anti-clockwise") ||
+    /\bccw\b/.test(p)
+  );
+}
+
+export function isClockwise(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  if (isCounterclockwise(p)) return false;
+  return p.includes("clockwise") || /\bcw\b/.test(p);
+}
+
+/** Degrees of rotation implied by the prompt (signed: negative = CCW). */
+export function parseRotationDegrees(
+  prompt: string,
+  opts: { defaultDegrees: number; continuousDefault?: number } = {
+    defaultDegrees: 180,
+  },
+): number {
+  const p = prompt.toLowerCase();
+  const continuousDefault = opts.continuousDefault ?? 360;
+  let deg = opts.defaultDegrees;
+
+  const explicit = p.match(/(-?\d+(?:\.\d+)?)\s*(?:°|deg(?:rees?)?)/);
+  if (explicit) {
+    deg = Number(explicit[1]);
+  } else if (/\b45\b/.test(p) && (p.includes("rotat") || p.includes("turn") || p.includes("spin"))) {
+    deg = 45;
+  } else if (/\b90\b/.test(p) && (p.includes("rotat") || p.includes("turn") || p.includes("spin"))) {
+    deg = 90;
+  } else if (/\b180\b/.test(p)) {
+    deg = 180;
+  } else if (
+    /\b360\b/.test(p) ||
+    p.includes("full turn") ||
+    p.includes("full rotation") ||
+    p.includes("full circle") ||
+    p.includes("complete rotation") ||
+    p.includes("complete turn") ||
+    p.includes("continuously") ||
+    p.includes("continuous") ||
+    p.includes("keep spinning") ||
+    p.includes("keep rotating") ||
+    (p.includes("loop") && (p.includes("rotat") || p.includes("spin"))) ||
+    (p.includes("seamlessly") && (p.includes("rotat") || p.includes("spin") || p.includes("loop")))
+  ) {
+    deg = continuousDefault;
+  } else if (p.includes("spin") || p.includes("full rotat")) {
+    deg = continuousDefault;
+  }
+
+  if (isCounterclockwise(p)) {
+    deg = -Math.abs(deg);
+  } else if (isClockwise(p)) {
+    deg = Math.abs(deg);
+  }
+
+  return deg;
+}
+
+export function wantsLoopFromPrompt(prompt: string, intent: AnimationIntent): boolean {
+  const p = prompt.toLowerCase();
+  if (
+    p.includes("loop") ||
+    p.includes("seamless") ||
+    p.includes("continuously") ||
+    p.includes("continuous") ||
+    p.includes("forever") ||
+    p.includes("repeat") ||
+    p.includes("infinite")
+  ) {
+    return true;
+  }
+  return intent.interaction === "loop";
+}
+
+export function wantsPauseBeforeStart(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  return (
+    (p.includes("pause") || p.includes("delay") || p.includes("wait")) &&
+    (p.includes("before") || p.includes("prior") || p.includes("start"))
+  );
+}
+
+function defaultPeakScale(intent: AnimationIntent): number {
+  return intent.intensity === "subtle" ? 1.05 : intent.intensity === "playful" ? 1.2 : 1.1;
+}
+
+function scaleKeyTimes(duration: number, next: AnimationDocument): void {
+  const factor = duration / Math.max(next.duration, 1);
+  next.duration = duration;
+  for (const t of next.tracks) {
+    for (const pr of t.properties) {
+      for (const k of pr.keyframes) {
+        k.time = Math.round(k.time * factor);
+      }
+    }
+  }
+}
+
+function setPeakScaleValues(next: AnimationDocument, peak: number): void {
+  for (const t of next.tracks) {
+    for (const pr of t.properties) {
+      if (pr.property !== "scaleX" && pr.property !== "scaleY") continue;
+      if (!pr.keyframes.length) continue;
+      const values = pr.keyframes.map((k) =>
+        typeof k.value === "number" ? k.value : 1,
+      );
+      const start = values[0] ?? 1;
+      const end = values[values.length - 1] ?? 1;
+      let peakIdx = -1;
+      let peakDist = -1;
+      for (let i = 0; i < values.length; i++) {
+        const dist = Math.abs(values[i] - 1);
+        // Prefer interior keyframes that deviate from identity
+        if (i > 0 && i < values.length - 1 && dist >= peakDist) {
+          peakDist = dist;
+          peakIdx = i;
+        }
+      }
+      if (peakIdx < 0) {
+        // No interior peak — pick the max absolute deviation
+        for (let i = 0; i < values.length; i++) {
+          const dist = Math.abs(values[i] - 1);
+          if (dist > peakDist) {
+            peakDist = dist;
+            peakIdx = i;
+          }
+        }
+      }
+      if (peakIdx >= 0 && peakDist > 0.001) {
+        const sign = values[peakIdx] >= 1 || peak >= 1 ? 1 : -1;
+        pr.keyframes[peakIdx].value = sign < 0 ? Math.min(peak, 1) : peak;
+      } else if (pr.keyframes.length >= 3) {
+        pr.keyframes[Math.floor(pr.keyframes.length / 2)].value = peak;
+      } else if (pr.keyframes.length === 2) {
+        // Insert a mid peak
+        const mid = Math.round(
+          ((pr.keyframes[0].time as number) + (pr.keyframes[1].time as number)) / 2,
+        );
+        pr.keyframes.splice(1, 0, {
+          id: `kf_${nanoid(6)}`,
+          time: mid,
+          value: peak,
+          easing: pr.keyframes[0].easing ?? "easeInOut",
+        });
+      }
+      // Keep start/end near identity when they looked like rest poses
+      if (Math.abs(start - 1) < 0.02) pr.keyframes[0].value = 1;
+      if (Math.abs(end - 1) < 0.02) {
+        pr.keyframes[pr.keyframes.length - 1].value = 1;
+      }
+    }
+  }
+}
+
+function flipRotationDirection(next: AnimationDocument, direction: "cw" | "ccw"): void {
+  for (const t of next.tracks) {
+    const rot = t.properties.find((pr) => pr.property === "rotation");
+    if (!rot) continue;
+    for (const k of rot.keyframes) {
+      if (typeof k.value !== "number") continue;
+      if (direction === "ccw") k.value = -Math.abs(k.value);
+      else k.value = Math.abs(k.value);
+    }
+  }
+}
+
+function removeScaleTracks(next: AnimationDocument): void {
+  for (const t of next.tracks) {
+    t.properties = t.properties.filter(
+      (pr) => pr.property !== "scaleX" && pr.property !== "scaleY",
+    );
+  }
+}
+
+function insertPauseBeforeStart(next: AnimationDocument, pauseMs?: number): void {
+  const pause = Math.max(
+    120,
+    Math.min(pauseMs ?? Math.round(next.duration * 0.15), Math.round(next.duration * 0.4)),
+  );
+  next.duration = next.duration + pause;
+  for (const t of next.tracks) {
+    for (const pr of t.properties) {
+      if (!pr.keyframes.length) continue;
+      const first = pr.keyframes[0];
+      const holdValue = first.value;
+      // Shift existing keys
+      for (const k of pr.keyframes) {
+        k.time = Math.round(k.time + pause);
+      }
+      // Hold at start value during the pause
+      if (first.time !== 0) {
+        pr.keyframes.unshift({
+          id: `kf_${nanoid(6)}`,
+          time: 0,
+          value: holdValue,
+          easing: "linear",
+        });
+      }
+      // Ensure a key at pause boundary matching the original start
+      const atPause = pr.keyframes.find((k) => k.time === pause);
+      if (!atPause) {
+        pr.keyframes.splice(1, 0, {
+          id: `kf_${nanoid(6)}`,
+          time: pause,
+          value: holdValue,
+          easing: first.easing ?? "easeInOut",
+        });
+      }
+      pr.keyframes.sort((a, b) => a.time - b.time);
+    }
+  }
+}
+
 function step(
   description: string,
   component?: SvgComponent,
@@ -125,7 +406,9 @@ export function buildPlanFromPrompt(
   const needsApproval: string[] = [];
   const steps: AnimationPlanStep[] = [];
   let duration = intent.complexity === "simple" ? 800 : intent.complexity === "complex" ? 1800 : 1200;
-  const loop = intent.interaction === "loop";
+  let loop = wantsLoopFromPrompt(prompt, intent);
+  const explicitDuration = parseDurationMs(prompt);
+  if (explicitDuration != null) duration = explicitDuration;
 
   const texts = textComponents(components);
   const lid = findComponentByRole(components, "lid");
@@ -156,6 +439,7 @@ export function buildPlanFromPrompt(
       (intent.complexity === "simple" ? 900 : intent.complexity === "complex" ? 1600 : 1200) /
         (intent.intensity === "subtle" ? 1.1 : 1),
     );
+    if (explicitDuration != null) duration = explicitDuration;
     return {
       iconName,
       steps,
@@ -186,31 +470,37 @@ export function buildPlanFromPrompt(
       }
       duration = Math.round(1200 / (intent.intensity === "subtle" ? 1.1 : 1));
     }
-  } else if (p.includes("gear") || p.includes("settings") || p.includes("rotate") && gear) {
+  } else if (
+    p.includes("gear") ||
+    p.includes("settings") ||
+    ((p.includes("rotate") || p.includes("rotation") || p.includes("spin")) &&
+      (gear ||
+        iconName.toLowerCase().includes("settings") ||
+        iconName.toLowerCase().includes("gear")))
+  ) {
     const target = gear ?? components[0];
-    const rot = p.includes("45")
-      ? 45
-      : p.includes("90")
-        ? 90
-        : Math.round((intent.complexity === "simple" ? 45 : 180) * scale);
-    steps.push(step(`Rotate the gear clockwise ${rot}°.`, target));
-    if (
-      p.includes("grow") ||
-      p.includes("scale") ||
-      p.includes("bigger") ||
-      p.includes("shrink") ||
-      intent.complexity !== "simple"
-    ) {
-      const s = intent.intensity === "subtle" ? 1.05 : intent.intensity === "playful" ? 1.2 : 1.1;
+    const rot = parseRotationDegrees(prompt, {
+      defaultDegrees: Math.round((intent.complexity === "simple" ? 45 : 180) * scale),
+      continuousDefault: 360,
+    });
+    const dirLabel = rot < 0 ? "counterclockwise" : "clockwise";
+    steps.push(step(`Rotate the gear ${dirLabel} ${Math.abs(rot)}°.`, target));
+    if (wantsScaleMotion(prompt) || intent.complexity !== "simple") {
+      const s = parseScalePeak(prompt) ?? defaultPeakScale(intent);
       steps.push(step(`Scale up to ${Math.round(s * 100)}%.`, target));
       steps.push(step("Return scale to 100%.", target));
     }
-    if (p.includes("pause") || intent.complexity === "complex") {
+    if (wantsPauseBeforeStart(prompt)) {
+      steps.push(step("Pause briefly before motion starts."));
+    } else if (p.includes("pause") || intent.complexity === "complex") {
       steps.push(step("Pause briefly at the peak."));
     }
     if (p.includes("reverse") || (p.includes("spring") && intent.complexity === "complex")) {
       steps.push(step("Reverse rotation back to the start.", target));
       steps.push(step("Settle with a subtle spring.", target));
+    }
+    if (explicitDuration == null && wantsLoopFromPrompt(prompt, intent) && Math.abs(rot) >= 360) {
+      duration = Math.max(duration, 2000);
     }
   } else if (p.includes("pencil") || p.includes("writ")) {
     if (!pencil) {
@@ -287,6 +577,8 @@ export function buildPlanFromPrompt(
     }
     duration = 1000;
   }
+
+  if (explicitDuration != null) duration = explicitDuration;
 
   return {
     iconName,
@@ -464,42 +756,56 @@ export function generateAnimationFromPlan(
     (p.includes("gear") ||
       p.includes("settings") ||
       p.includes("rotate") ||
+      p.includes("rotation") ||
       p.includes("spin") ||
-      plan.iconName.toLowerCase().includes("settings"))
+      plan.iconName.toLowerCase().includes("settings") ||
+      plan.iconName.toLowerCase().includes("gear"))
   ) {
-    const rot = p.includes("45")
-      ? 45
-      : p.includes("90")
-        ? 90
-        : intent.complexity === "simple"
+    const rot = parseRotationDegrees(prompt, {
+      defaultDegrees:
+        intent.complexity === "simple"
           ? Math.round(45 * scale)
-          : Math.round(180 * scale);
-    const peakScale =
-      intent.intensity === "subtle" ? 1.05 : intent.intensity === "playful" ? 1.18 : 1.1;
-    const wantScale =
-      p.includes("grow") ||
-      p.includes("scale") ||
-      p.includes("bigger") ||
-      p.includes("shrink") ||
-      intent.complexity !== "simple";
-    const wantReverse = p.includes("reverse") || intent.complexity === "complex";
-    const wantPause = p.includes("pause") || intent.complexity === "complex";
-    const wantSpring = p.includes("spring") || intent.style === "organic" || intent.intensity === "playful";
+          : Math.round(180 * scale),
+      continuousDefault: 360,
+    });
+    const peakScale = parseScalePeak(prompt) ?? defaultPeakScale(intent);
+    const wantScale = wantsScaleMotion(prompt) || intent.complexity !== "simple";
+    const wantReverse = p.includes("reverse") && !wantsLoopFromPrompt(prompt, intent);
+    const pauseBefore = wantsPauseBeforeStart(prompt);
+    const wantPause =
+      !pauseBefore && (p.includes("pause") || intent.complexity === "complex");
+    const wantSpring =
+      p.includes("spring") || intent.style === "organic" || intent.intensity === "playful";
+    // Continuous full spins loop cleanly with linear rotation; scale keeps styled easing
+    const continuousSpin = Math.abs(rot) >= 360 && !wantReverse;
+    const rotEasing = continuousSpin ? "linear" : easing;
 
-    const mid = wantPause ? D * 0.4 : D * 0.5;
-    const pauseEnd = wantPause ? D * 0.55 : mid;
+    let startT = 0;
+    if (pauseBefore) {
+      startT = Math.round(D * 0.15);
+    }
+    const motionD = Math.max(D - startT, 1);
+    const mid = startT + (wantPause ? motionD * 0.4 : motionD * 0.5);
+    const pauseEnd = wantPause ? startT + motionD * 0.55 : mid;
 
-    const rotKeys = [kf(0, 0, easing), kf(mid, rot, easing)];
-    if (wantPause) rotKeys.push(kf(pauseEnd, rot, "linear"));
+    const rotKeys = [kf(0, 0, "linear")];
+    if (pauseBefore) rotKeys.push(kf(startT, 0, "linear"));
+    if (wantPause) {
+      rotKeys.push(kf(mid, rot, rotEasing));
+      rotKeys.push(kf(pauseEnd, rot, "linear"));
+    } else if (!continuousSpin) {
+      rotKeys.push(kf(mid, rot / (wantReverse ? 1 : 1), rotEasing));
+    }
     if (wantReverse) {
       rotKeys.push(kf(D, 0, wantSpring ? "spring" : easing));
     } else {
-      rotKeys.push(kf(D, rot, easing));
+      rotKeys.push(kf(D, rot, rotEasing));
     }
 
     const scaleKeys = wantScale
       ? [
-          kf(0, 1, easing),
+          kf(0, 1, "linear"),
+          ...(pauseBefore ? [kf(startT, 1, "linear")] : []),
           kf(mid, peakScale, easing),
           ...(wantPause ? [kf(pauseEnd, peakScale, "linear")] : []),
           kf(D, 1, wantSpring ? "spring" : easing),
@@ -508,20 +814,45 @@ export function generateAnimationFromPlan(
 
     const targets = [gearMain];
     const center = findComponentByRole(components, "center");
-    // Rotate center with gear unless user says otherwise
-    if (center && !p.includes("center") && !p.includes("independ")) {
+    // Keep concentric center pieces in sync unless the user asks to separate them.
+    // Avoid matching "centered" / "centre" positioning language.
+    const separateCenter =
+      /\bcenters?\b/.test(p) &&
+      (p.includes("independ") ||
+        p.includes("separate") ||
+        p.includes("still") ||
+        p.includes("static") ||
+        p.includes("fixed") ||
+        p.includes("don't") ||
+        p.includes("dont") ||
+        p.includes("except"));
+    if (center && !separateCenter && center.id !== gearMain.id) {
       targets.push(center);
     }
 
     for (const c of targets) {
       doc.tracks.push(
-        ...tracksForComponent(c, (id, name) =>
-          track(id, name, [
-            prop("rotation", rotKeys.map((k) => ({ ...k, id: `kf_${nanoid(6)}` }))),
-            prop("scaleX", scaleKeys.map((k) => ({ ...k, id: `kf_${nanoid(6)}` }))),
-            prop("scaleY", scaleKeys.map((k) => ({ ...k, id: `kf_${nanoid(6)}` }))),
-          ]),
-        ),
+        ...tracksForComponent(c, (id, name) => {
+          const props = [
+            prop(
+              "rotation",
+              rotKeys.map((k) => ({ ...k, id: `kf_${nanoid(6)}` })),
+            ),
+          ];
+          if (wantScale) {
+            props.push(
+              prop(
+                "scaleX",
+                scaleKeys.map((k) => ({ ...k, id: `kf_${nanoid(6)}` })),
+              ),
+              prop(
+                "scaleY",
+                scaleKeys.map((k) => ({ ...k, id: `kf_${nanoid(6)}` })),
+              ),
+            );
+          }
+          return track(id, name, props);
+        }),
       );
     }
     void gear;
@@ -790,29 +1121,82 @@ export function refineAnimation(
     })),
   };
 
-  if (p.includes("slower") || p.includes("slow")) {
-    const factor = p.includes("much") ? 1.8 : 1.4;
-    next.duration = Math.round(doc.duration * factor);
-    for (const t of next.tracks) {
-      for (const pr of t.properties) {
-        for (const k of pr.keyframes) {
-          k.time = Math.round(k.time * factor);
-        }
+  // Explicit duration ("4 seconds", "2000ms") — before generic slower/faster
+  const explicitDur = parseDurationMs(instruction);
+  if (explicitDur != null) {
+    scaleKeyTimes(explicitDur, next);
+    return next;
+  }
+
+  // Remove scale / keep only rotation
+  if (
+    (p.includes("remove") || p.includes("delete") || p.includes("drop") || p.includes("without")) &&
+    (p.includes("scale") || p.includes("scaling") || p.includes("size"))
+  ) {
+    removeScaleTracks(next);
+    return next;
+  }
+  if (
+    (p.includes("only") && (p.includes("rotat") || p.includes("spin"))) ||
+    (p.includes("keep only") && p.includes("rotat"))
+  ) {
+    removeScaleTracks(next);
+    return next;
+  }
+
+  // Direction changes
+  if (isCounterclockwise(p)) {
+    flipRotationDirection(next, "ccw");
+    return next;
+  }
+  if (isClockwise(p) && (p.includes("instead") || p.includes("rotat") || p.includes("spin"))) {
+    flipRotationDirection(next, "cw");
+    return next;
+  }
+
+  // Explicit peak scale ("110%", "more subtle, only increasing to 110%")
+  const peak = parseScalePeak(instruction);
+  if (peak != null) {
+    const hasScale = next.tracks.some((t) =>
+      t.properties.some((pr) => pr.property === "scaleX" || pr.property === "scaleY"),
+    );
+    if (hasScale) {
+      setPeakScaleValues(next, peak);
+    } else {
+      // Re-add a simple scale pulse if scale was previously removed
+      for (const t of next.tracks) {
+        const mid = Math.round(next.duration * 0.5);
+        t.properties.push(
+          prop("scaleX", [
+            kf(0, 1, "easeInOut"),
+            kf(mid, peak, "easeInOut"),
+            kf(next.duration, 1, "easeInOut"),
+          ]),
+          prop("scaleY", [
+            kf(0, 1, "easeInOut"),
+            kf(mid, peak, "easeInOut"),
+            kf(next.duration, 1, "easeInOut"),
+          ]),
+        );
       }
     }
     return next;
   }
 
+  // Pause / delay before motion starts
+  if (wantsPauseBeforeStart(p)) {
+    insertPauseBeforeStart(next);
+    return next;
+  }
+
+  if (p.includes("slower") || p.includes("slow")) {
+    const factor = p.includes("much") ? 1.8 : 1.4;
+    scaleKeyTimes(Math.round(doc.duration * factor), next);
+    return next;
+  }
+
   if (p.includes("faster") || p.includes("quicker") || p.includes("speed")) {
-    const factor = 0.7;
-    next.duration = Math.round(doc.duration * factor);
-    for (const t of next.tracks) {
-      for (const pr of t.properties) {
-        for (const k of pr.keyframes) {
-          k.time = Math.round(k.time * factor);
-        }
-      }
-    }
+    scaleKeyTimes(Math.round(doc.duration * 0.7), next);
     return next;
   }
 
@@ -826,7 +1210,7 @@ export function refineAnimation(
     return next;
   }
 
-  if (p.includes("subtle")) {
+  if (p.includes("subtle") && !p.includes("easing")) {
     for (const t of next.tracks) {
       for (const pr of t.properties) {
         if (pr.property === "rotation" || pr.property === "x" || pr.property === "y") {
@@ -852,23 +1236,6 @@ export function refineAnimation(
       if (!rot) continue;
       for (const k of rot.keyframes) {
         if (typeof k.value === "number") k.value = k.value * 2;
-      }
-    }
-    return next;
-  }
-
-  if (p.match(/(\d+)\s*ms/) || p.match(/(\d+)\s*millisecond/)) {
-    const m = p.match(/(\d+)\s*ms/) || p.match(/(\d+)\s*millisecond/);
-    if (m) {
-      const newDur = Number(m[1]);
-      const factor = newDur / Math.max(doc.duration, 1);
-      next.duration = newDur;
-      for (const t of next.tracks) {
-        for (const pr of t.properties) {
-          for (const k of pr.keyframes) {
-            k.time = Math.round(k.time * factor);
-          }
-        }
       }
     }
     return next;
@@ -956,7 +1323,15 @@ export function chatReply(
     };
   }
 
-  if (p.includes("subtle")) {
+  if (
+    p.includes("subtle") &&
+    !p.includes("easing") &&
+    !p.includes("rotat") &&
+    !p.includes("spin") &&
+    !p.includes("scale") &&
+    !p.includes("size") &&
+    p.length < 48
+  ) {
     return {
       message: "Keeping motion small and timing short.",
       readyToGenerate: true,

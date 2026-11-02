@@ -34,6 +34,24 @@ describe("parseChatIconRequest", () => {
     const r = parseChatIconRequest("make it spin slowly");
     expect(r.wantsIcon).toBe(false);
   });
+
+  it("does not treat 'this icon' as a library lookup", () => {
+    const r = parseChatIconRequest(
+      "Rotate this icon clockwise 360 degrees over 1 second and loop.",
+    );
+    expect(r.wantsIcon).toBe(false);
+    expect(r.iconQuery).toBeNull();
+    expect(r.autoGenerate).toBe(true);
+  });
+
+  it("still loads when explicitly placing a named icon", () => {
+    const r = parseChatIconRequest(
+      "Put the gear icon from Phosphor and make it spin",
+    );
+    expect(r.wantsIcon).toBe(true);
+    expect(r.iconQuery).toBe("settings");
+    expect(r.library).toBe("ph");
+  });
 });
 
 describe("resolveIconFromPrompt", () => {

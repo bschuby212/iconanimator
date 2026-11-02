@@ -52,6 +52,18 @@ export function AppShell() {
     return () => window.clearTimeout(t);
   }, [project, persist]);
 
+  // Expose store for Playwright / QA scripts (read-only inspection + actions)
+  useEffect(() => {
+    (
+      window as unknown as {
+        __ICON_ANIMATOR__?: typeof useProjectStore;
+      }
+    ).__ICON_ANIMATOR__ = useProjectStore;
+    return () => {
+      delete (window as unknown as { __ICON_ANIMATOR__?: unknown }).__ICON_ANIMATOR__;
+    };
+  }, []);
+
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!drag.current) return;
