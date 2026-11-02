@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { ChevronDown, Search, Type, Upload } from "lucide-react";
 import {
   LIBRARIES,
@@ -14,16 +14,19 @@ import { addRecent } from "@/lib/persistence/db";
 
 const PAGE = 240;
 
+const controlClass =
+  "h-8 rounded-md border border-[var(--border)] bg-white text-xs text-[var(--text)] transition-colors hover:bg-black/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)]";
+
 export function IconBrowser() {
   const selectIcon = useProjectStore((s) => s.selectIcon);
   const uploadSvg = useProjectStore((s) => s.uploadSvg);
   const addTextLayer = useProjectStore((s) => s.addTextLayer);
   const clearIconKeepText = useProjectStore((s) => s.clearIconKeepText);
-  const selectedId = useProjectStore((s) => s.project.icon?.id);
   const hasIcon = useProjectStore((s) => !!s.project.icon);
   const hasText = useProjectStore((s) =>
     s.project.components.some((c) => c.role === "text"),
   );
+
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [library, setLibrary] = useState<LibraryId | "all">("ph");
@@ -35,13 +38,17 @@ export function IconBrowser() {
   } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeFamily, setActiveFamily] = useState<IconRecord | null>(null);
+  /** Last family placed — only for variant switching, not grid highlight */
+  const [variantFamily, setVariantFamily] = useState<IconRecord | null>(null);
   const [variantId, setVariantId] = useState<string>("regular");
+  const [pressedId, setPressedId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const icons = page?.q === deferredQuery && page?.library === library
-    ? page.icons
-    : [];
+  const icons =
+    page?.q === deferredQuery && page?.library === library ? page.icons : [];
   const hasMore =
     page?.q === deferredQuery && page?.library === library
       ? page.hasMore
@@ -71,7 +78,8 @@ export function IconBrowser() {
       .then((res) => res.json())
       .then((data: { icons?: IconRecord[]; hasMore?: boolean }) => {
         if (!active) return;
-        setActiveFamily(null);
+        // Clear variant chrome when the grid context changes
+        setVariantFamily(null);
         setPage({
           q,
           library: lib,
@@ -81,13 +89,19 @@ export function IconBrowser() {
       })
       .catch(() => {
         if (!active) return;
-        setActiveFamily(null);
+        setVariantFamily(null);
         setPage({ q, library: lib, icons: [], hasMore: false });
       });
     return () => {
       active = false;
     };
   }, [deferredQuery, library]);
+
+  useEffect(() => {
+    return () => {
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+    };
+  }, []);
 
   const loadMore = () => {
     if (loading || loadingMore) return;
@@ -117,24 +131,13 @@ export function IconBrowser() {
       .finally(() => setLoadingMore(false));
   };
 
-  const previewSvg = useMemo(() => {
-    if (!activeFamily) return null;
-    const v =
-      activeFamily.variants.find((x) => x.id === variantId) ??
-      activeFamily.variants[0];
-    return v?.svg ?? activeFamily.svg;
-  }, [activeFamily, variantId]);
-
-  const onSelectFamily = (icon: IconRecord) => {
-    setActiveFamily(icon);
-    setVariantId(icon.defaultVariant);
-    const v =
-      icon.variants.find((x) => x.id === icon.defaultVariant) ??
-      icon.variants[0];
-    void commitSelection(icon, v?.id ?? icon.defaultVariant, v?.svg ?? icon.svg);
+  const flashPress = (id: string) => {
+    setPressedId(id);
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = setTimeout(() => setPressedId(null), 160);
   };
 
-  const commitSelection = async (
+  const placeIcon = async (
     icon: IconRecord,
     nextVariant: string,
     svg: string,
@@ -154,12 +157,44 @@ export function IconBrowser() {
     });
   };
 
+  const onPickIcon = (icon: IconRecord) => {
+    flashPress(icon.id);
+    setVariantFamily(icon.variants.length > 1 ? icon : null);
+    setVariantId(icon.defaultVariant);
+    const v =
+      icon.variants.find((x) => x.id === icon.defaultVariant) ??
+      icon.variants[0];
+    void placeIcon(icon, v?.id ?? icon.defaultVariant, v?.svg ?? icon.svg);
+  };
+
   const onVariantChange = (next: string) => {
-    if (!activeFamily) return;
+    if (!variantFamily) return;
     setVariantId(next);
-    const v = activeFamily.variants.find((x) => x.id === next);
+    const v = variantFamily.variants.find((x) => x.id === next);
     if (!v) return;
-    void commitSelection(activeFamily, next, v.svg);
+    void placeIcon(variantFamily, next, v.svg);
+  };
+
+  const onUpload = async (file: File | undefined) => {
+    setUploadError(null);
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".svg") && file.type !== "image/svg+xml") {
+      setUploadError("Please choose an SVG file.");
+      return;
+    }
+    try {
+      const text = await file.text();
+      if (!text.includes("<svg") && !text.includes("<path")) {
+        setUploadError("That file doesn’t look like a valid SVG.");
+        return;
+      }
+      uploadSvg(text, file.name.replace(/\.svg$/i, "") || "custom-icon");
+      setVariantFamily(null);
+    } catch {
+      setUploadError("Couldn’t read that file.");
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   const activeLabel =
@@ -168,7 +203,7 @@ export function IconBrowser() {
       : LIBRARIES.find((l) => l.id === library)?.name ?? "Library";
 
   const showVariantBar =
-    !!activeFamily && activeFamily.variants.length > 1;
+    !!variantFamily && variantFamily.variants.length > 1;
 
   return (
     <div className="flex h-full flex-col bg-[var(--surface)]">
@@ -179,20 +214,27 @@ export function IconBrowser() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
-              library === "all"
-                ? "Search icons…"
-                : `Search ${activeLabel}…`
+              library === "all" ? "Search icons…" : `Search ${activeLabel}…`
             }
-            className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] pl-8 pr-3 text-sm outline-none transition-colors focus:border-[var(--accent)] focus:bg-white"
+            aria-label="Search icons"
+            className={cn(
+              controlClass,
+              "w-full bg-[var(--bg)] pl-8 pr-3 text-[13px] placeholder:text-[var(--text-secondary)] focus:bg-white focus:border-[var(--accent)]",
+            )}
           />
         </div>
+
         <div className="flex gap-1.5">
           <div className="relative min-w-0 flex-1" ref={menuRef}>
             <button
               type="button"
-              className="flex h-8 w-full items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-2 text-left text-xs text-[var(--text)] outline-none hover:bg-[var(--bg)]"
+              className={cn(
+                controlClass,
+                "flex w-full items-center gap-1.5 px-2 text-left",
+              )}
               aria-haspopup="listbox"
               aria-expanded={menuOpen}
+              aria-label="Icon library"
               onClick={() => setMenuOpen((v) => !v)}
             >
               <LibraryMark svg={getLibraryLogo(library)} />
@@ -207,7 +249,7 @@ export function IconBrowser() {
             {menuOpen && (
               <ul
                 role="listbox"
-                className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-auto rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg"
+                className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-auto rounded-md border border-[var(--border)] bg-white py-1 shadow-md"
               >
                 <LibraryOption
                   label="All libraries"
@@ -233,55 +275,73 @@ export function IconBrowser() {
               </ul>
             )}
           </div>
-          <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-2 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg)] hover:text-[var(--text)]">
+
+          <label
+            className={cn(
+              controlClass,
+              "inline-flex cursor-pointer items-center gap-1.5 px-2.5 text-[var(--text-secondary)] hover:text-[var(--text)]",
+            )}
+          >
             <input
+              ref={fileRef}
               type="file"
               accept=".svg,image/svg+xml"
               className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                void f.text().then((text) =>
-                  uploadSvg(text, f.name.replace(/\.svg$/i, "")),
-                );
-              }}
+              onChange={(e) => void onUpload(e.target.files?.[0])}
             />
             <Upload className="h-3.5 w-3.5" />
             Upload
           </label>
         </div>
+
+        {uploadError && (
+          <p className="text-[11px] text-red-600" role="alert">
+            {uploadError}
+          </p>
+        )}
+
         <div className="flex gap-1.5">
           <button
             type="button"
-            onClick={() => addTextLayer("Label")}
-            className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-white text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--bg)]"
+            onClick={() => {
+              addTextLayer("Label");
+              // Text action must not change browser chrome
+            }}
+            className={cn(
+              controlClass,
+              "inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 px-2 font-medium",
+            )}
           >
-            <Type className="h-3.5 w-3.5" />
+            <Type className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
             Add text
           </button>
           {hasIcon && hasText && (
             <button
               type="button"
               onClick={() => clearIconKeepText()}
-              className="h-8 shrink-0 rounded-lg border border-[var(--border)] px-2 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg)] hover:text-[var(--text)]"
+              className={cn(
+                controlClass,
+                "shrink-0 px-2 text-[var(--text-secondary)] hover:text-[var(--text)]",
+              )}
               title="Remove icon, keep text"
             >
               Icon off
             </button>
           )}
         </div>
+
         {showVariantBar && (
           <div className="flex flex-wrap gap-1" data-testid="icon-variant-bar">
-            {activeFamily!.variants.map((v) => (
+            {variantFamily!.variants.map((v) => (
               <button
                 key={v.id}
                 type="button"
                 onClick={() => onVariantChange(v.id)}
                 className={cn(
-                  "h-7 rounded-md px-2 text-[11px] font-medium transition-colors",
+                  "h-7 rounded-md border px-2 text-[11px] font-medium transition-colors",
                   variantId === v.id
-                    ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
-                    : "bg-black/[0.04] text-[var(--text-secondary)] hover:text-[var(--text)]",
+                    ? "border-[var(--border)] bg-black/[0.06] text-[var(--text)]"
+                    : "border-transparent bg-transparent text-[var(--text-secondary)] hover:bg-black/[0.04] hover:text-[var(--text)]",
                 )}
               >
                 {v.label}
@@ -291,38 +351,31 @@ export function IconBrowser() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
         <div className="grid grid-cols-4 gap-0.5">
           {icons.map((icon) => {
-            const selected =
-              selectedId === icon.id ||
-              selectedId?.startsWith(`${icon.id}:`) ||
-              activeFamily?.id === icon.id;
+            const pressed = pressedId === icon.id;
             return (
               <button
                 key={icon.id}
+                type="button"
                 title={
                   library === "all"
                     ? `${icon.name} · ${icon.libraryName}`
                     : icon.name
                 }
-                onClick={() => onSelectFamily(icon)}
+                onClick={() => onPickIcon(icon)}
                 data-testid={`icon-card-${icon.id}`}
                 className={cn(
-                  "relative flex aspect-square flex-col items-center justify-center rounded-lg transition-colors",
-                  selected
-                    ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
-                    : "text-[var(--text)] hover:bg-black/[0.04]",
+                  "relative flex aspect-square flex-col items-center justify-center rounded-md text-[var(--text)] transition-colors",
+                  "hover:bg-black/[0.045]",
+                  "active:bg-black/[0.07]",
+                  pressed && "bg-black/[0.07]",
                 )}
               >
                 <span
-                  className="flex h-[20px] w-[20px] items-center justify-center text-current [&_svg]:h-full [&_svg]:w-full [&_svg]:max-h-full [&_svg]:max-w-full"
-                  dangerouslySetInnerHTML={{
-                    __html:
-                      activeFamily?.id === icon.id && previewSvg
-                        ? previewSvg
-                        : icon.svg,
-                  }}
+                  className="pointer-events-none flex h-5 w-5 items-center justify-center [&_svg]:h-full [&_svg]:w-full [&_svg]:max-h-full [&_svg]:max-w-full"
+                  dangerouslySetInnerHTML={{ __html: icon.svg }}
                 />
                 {library === "all" && (
                   <span className="mt-0.5 max-w-full truncate px-0.5 text-[8px] leading-none text-[var(--text-secondary)]">
@@ -343,7 +396,10 @@ export function IconBrowser() {
             type="button"
             disabled={loading || loadingMore}
             onClick={loadMore}
-            className="mt-2 h-8 w-full rounded-lg border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:bg-black/[0.03] disabled:opacity-50"
+            className={cn(
+              controlClass,
+              "mt-2 w-full font-medium text-[var(--text-secondary)] disabled:opacity-50",
+            )}
           >
             {loading || loadingMore ? "Loading…" : "Load more"}
           </button>
@@ -385,9 +441,9 @@ function LibraryOption({
         role="option"
         aria-selected={active}
         className={cn(
-          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs",
+          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors",
           active
-            ? "bg-[#0f9f8a]/10 text-[#0b7f6e]"
+            ? "bg-black/[0.05] font-medium text-[var(--text)]"
             : "text-[var(--text)] hover:bg-black/[0.03]",
         )}
         onClick={onSelect}
