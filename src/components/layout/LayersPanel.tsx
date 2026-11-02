@@ -18,7 +18,7 @@ export function LayersPanel() {
           Layers
         </p>
         <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
-          Select a layer to edit it in Inspect.
+          Select a layer to edit it in Animate.
         </p>
       </div>
 
@@ -37,7 +37,7 @@ export function LayersPanel() {
               type="button"
               onClick={() => {
                 selectComponents([c.id]);
-                setRightTab("inspector");
+                setRightTab("animate");
               }}
               className={cn(
                 "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors",

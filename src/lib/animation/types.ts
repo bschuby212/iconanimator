@@ -183,7 +183,7 @@ export interface CreationHistoryEntry {
   name: string;
   iconName: string;
   prompt: string;
-  icon: IconSelection;
+  icon: IconSelection | null;
   parsed: ParsedSvg | null;
   components: SvgComponent[];
   plan: AnimationPlan | null;

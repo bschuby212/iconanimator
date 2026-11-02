@@ -26,6 +26,16 @@ export function AiChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const textLayers = useMemo(
+    () => project.components.filter((c) => c.role === "text"),
+    [project.components],
+  );
+  const hasContent = !!project.icon || textLayers.length > 0;
+  const subjectLabel =
+    project.icon?.name ??
+    textLayers[0]?.name ??
+    (textLayers.length > 1 ? "your text" : "this composition");
+
   const messages = useMemo(() => {
     return project.conversation
       .filter((m) => m.role === "user" || !isRedundantAssistantLine(m.content))
@@ -37,15 +47,15 @@ export function AiChatPanel() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, project.plan?.steps.length, project.animation]);
 
-  if (!project.icon) {
+  if (!hasContent) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-[#f7f7f7] px-6 text-center">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm">
           <Sparkles className="h-4 w-4 text-[#0f9f8a]" />
         </div>
-        <p className="text-sm font-medium text-black">Start with an icon</p>
+        <p className="text-sm font-medium text-black">Start with an icon or text</p>
         <p className="text-xs text-[var(--text-secondary)]">
-          Pick one from the library, then describe the motion here.
+          Pick one from the library or add a text layer, then describe the motion here.
         </p>
       </div>
     );
@@ -81,8 +91,14 @@ export function AiChatPanel() {
           <div className="rounded-2xl border border-black/[0.04] bg-white px-3.5 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
             <p className="text-[13px] leading-relaxed text-[var(--text-secondary)]">
               Describe how you’d like{" "}
-              <span className="font-medium text-black">{project.icon.name}</span> to
-              animate. Chat is the main way to create and refine here.
+              <span className="font-medium text-black">{subjectLabel}</span> to
+              animate
+              {textLayers.length > 0 && project.icon
+                ? " — including text layers"
+                : textLayers.length > 0
+                  ? " — fade, slide, pop, and more"
+                  : ""}
+              . Chat is the main way to create and refine here.
             </p>
           </div>
         )}
@@ -180,7 +196,9 @@ export function AiChatPanel() {
             placeholder={
               project.animation
                 ? "Ask for a change…"
-                : "Describe the animation…"
+                : textLayers.length && !project.icon
+                  ? "e.g. Fade the text in from below…"
+                  : "Describe the animation…"
             }
             className="w-full resize-none border-0 bg-transparent px-1.5 py-1 text-[13px] outline-none placeholder:text-[var(--text-secondary)]"
             data-testid="ai-prompt"

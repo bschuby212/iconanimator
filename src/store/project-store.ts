@@ -39,7 +39,7 @@ import type { ElementTrack } from "@/lib/animation/types";
 
 export type CanvasBg = "canvas" | "white" | "transparent";
 
-export type RightTab = "chat" | "inspector" | "layers";
+export type RightTab = "chat" | "animate" | "layers";
 
 export interface UiState {
   leftOpen: boolean;
@@ -172,13 +172,24 @@ function pushHistory(
   };
 }
 
+function subjectName(project: ProjectState): string {
+  if (project.icon?.name) return project.icon.name;
+  const text = project.components.find((c) => c.role === "text");
+  if (text?.name) return text.name;
+  return project.name || "Composition";
+}
+
+function hasAnimatableContent(project: ProjectState): boolean {
+  return !!project.icon || project.components.length > 0;
+}
+
 function upsertCreation(
   project: ProjectState,
   patch: Partial<CreationHistoryEntry>,
 ): CreationHistoryEntry[] {
   const list = [...(project.creationHistory ?? [])];
   const id = project.activeCreationId;
-  if (!id || !project.icon) return list;
+  if (!id || !hasAnimatableContent(project)) return list;
   const idx = list.findIndex((e) => e.id === id);
   const base: CreationHistoryEntry =
     idx >= 0
@@ -189,7 +200,7 @@ function upsertCreation(
           updatedAt: Date.now(),
           status: "draft",
           name: project.name,
-          iconName: project.icon.name,
+          iconName: subjectName(project),
           prompt: "",
           icon: project.icon,
           parsed: project.parsed,
@@ -317,7 +328,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         currentTime: 0,
         playing: false,
         readyToGenerate: false,
-        rightTab: existingText.length ? "inspector" : "chat",
+        rightTab: existingText.length ? "animate" : "chat",
         rightOpen: true,
       },
     }));
@@ -337,7 +348,7 @@ export const useProjectStore = create<Store>((set, get) => ({
       ui: {
         ...s.ui,
         selectedComponentIds: ids,
-        ...(ids.length ? { rightTab: "inspector" as const, rightOpen: true } : {}),
+        ...(ids.length ? { rightTab: "animate" as const, rightOpen: true } : {}),
       },
     })),
   selectElements: (ids) =>
@@ -429,7 +440,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         ...ui,
         selectedComponentIds: [compId],
         selectedElementIds: [elId],
-        rightTab: "inspector",
+        rightTab: "animate",
         rightOpen: true,
       },
     });
@@ -490,7 +501,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         playing: false,
         readyToGenerate: false,
         selectedComponentIds: textComponents[0] ? [textComponents[0].id] : [],
-        rightTab: "inspector",
+        rightTab: "animate",
       },
     });
   },
@@ -560,11 +571,12 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   sendChat: (message) => {
     const { project, ui } = get();
-    if (!project.icon || !message.trim()) return;
+    if (!hasAnimatableContent(project) || !message.trim()) return;
+    const name = subjectName(project);
     const userMsg = createUserMessage(message);
     const reply = chatReply(
       message,
-      project.icon.name,
+      name,
       project.components,
       project.intent,
       !!project.plan,
@@ -574,7 +586,7 @@ export const useProjectStore = create<Store>((set, get) => ({
     if (reply.updatePlan || !project.plan) {
       plan = buildPlanFromPrompt(
         message,
-        project.icon.name,
+        name,
         project.components,
         project.intent,
       );
@@ -607,7 +619,7 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   generateFromPlan: () => {
     const { project, ui } = get();
-    if (!project.icon || !project.plan) return;
+    if (!hasAnimatableContent(project) || !project.plan) return;
     const components = project.components;
     const parsed = project.parsed;
     const lastUser =
@@ -660,7 +672,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         playing: true,
         readyToGenerate: false,
         generating: false,
-        rightTab: "inspector",
+        rightTab: "animate",
       },
     });
   },
@@ -691,7 +703,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         playing: !!nextAnim,
         selectedComponentIds: [],
         selectedElementIds: [],
-        rightTab: nextAnim ? "inspector" : "chat",
+        rightTab: nextAnim ? "animate" : "chat",
         rightOpen: true,
         readyToGenerate: !!entry.plan && !nextAnim,
       },
@@ -748,7 +760,7 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   duplicateProject: () => {
     const { project } = get();
-    if (!project.icon) {
+    if (!hasAnimatableContent(project)) {
       get().newProject();
       return;
     }
@@ -760,7 +772,7 @@ export const useProjectStore = create<Store>((set, get) => ({
       updatedAt: now,
       status: project.animation ? "complete" : project.plan ? "planned" : "draft",
       name: project.name ? `${project.name} copy` : "",
-      iconName: project.icon.name,
+      iconName: subjectName(project),
       prompt:
         [...project.conversation].reverse().find((m) => m.role === "user")?.content ||
         "",
@@ -786,7 +798,7 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   clearAnimation: () => {
     const { project, ui } = get();
-    if (!project.icon) return;
+    if (!hasAnimatableContent(project)) return;
     const creationHistory = upsertCreation(project, {
       status: "draft",
       animation: null,

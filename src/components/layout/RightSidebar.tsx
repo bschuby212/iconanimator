@@ -1,14 +1,14 @@
 "use client";
 
 import { AiChatPanel } from "@/components/ai/AiChatPanel";
-import { Inspector } from "@/components/inspector/Inspector";
+import { AnimatePanel } from "@/components/animate/AnimatePanel";
 import { LayersPanel } from "@/components/layout/LayersPanel";
 import { useProjectStore, type RightTab } from "@/store/project-store";
 import { cn } from "@/lib/utils/cn";
 
 const TABS: { id: RightTab; label: string }[] = [
   { id: "chat", label: "Chat" },
-  { id: "inspector", label: "Inspect" },
+  { id: "animate", label: "Animate" },
   { id: "layers", label: "Layers" },
 ];
 
@@ -49,7 +49,7 @@ export function RightSidebar() {
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {rightTab === "chat" && <AiChatPanel />}
-        {rightTab === "inspector" && <Inspector />}
+        {rightTab === "animate" && <AnimatePanel />}
         {rightTab === "layers" && <LayersPanel />}
       </div>
     </div>
