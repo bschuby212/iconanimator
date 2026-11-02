@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { ZoomIn, ZoomOut } from "lucide-react";
+import { Type, ZoomIn, ZoomOut } from "lucide-react";
 import {
   useProjectStore,
 } from "@/store/project-store";
@@ -17,6 +17,7 @@ export function AnimationCanvas() {
   const setPlaying = useProjectStore((s) => s.setPlaying);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const setZoom = useProjectStore((s) => s.setZoom);
+  const addTextLayer = useProjectStore((s) => s.addTextLayer);
   const selectCanvasElement = useProjectStore((s) => s.selectCanvasElement);
   const raf = useRef<number>(0);
   const last = useRef<number>(0);
@@ -97,7 +98,7 @@ export function AnimationCanvas() {
       )}
       data-testid="animation-canvas"
     >
-      {/* Floating zoom-only mini menu — playback lives in the bottom timeline */}
+      {/* Floating canvas mini menu — zoom + add text (playback is bottom panel) */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 px-3">
         <div className="pointer-events-auto floating-toolbar flex items-center gap-0.5 px-1.5 py-1">
           <Button
@@ -120,6 +121,19 @@ export function AnimationCanvas() {
             title="Zoom in"
           >
             <ZoomIn className="h-3.5 w-3.5" />
+          </Button>
+          <div className="mx-0.5 h-4 w-px bg-[var(--border)]" />
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1 px-2 text-[12px] font-medium"
+            onClick={() => addTextLayer("Label")}
+            title="Add text"
+            aria-label="Add text"
+            data-testid="canvas-add-text"
+          >
+            <Type className="h-3.5 w-3.5" />
+            Add text
           </Button>
         </div>
       </div>

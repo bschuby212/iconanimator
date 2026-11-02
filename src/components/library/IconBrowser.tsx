@@ -1,7 +1,7 @@
 "use client";
 
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { ChevronDown, Search, Type, Upload } from "lucide-react";
+import { ChevronDown, Search, Upload } from "lucide-react";
 import {
   LIBRARIES,
   type IconRecord,
@@ -20,7 +20,6 @@ const controlClass =
 export function IconBrowser() {
   const selectIcon = useProjectStore((s) => s.selectIcon);
   const uploadSvg = useProjectStore((s) => s.uploadSvg);
-  const addTextLayer = useProjectStore((s) => s.addTextLayer);
   const clearIconKeepText = useProjectStore((s) => s.clearIconKeepText);
   const hasIcon = useProjectStore((s) => !!s.project.icon);
   const hasText = useProjectStore((s) =>
@@ -208,7 +207,58 @@ export function IconBrowser() {
   return (
     <div className="flex h-full flex-col bg-[var(--surface)]">
       <div className="space-y-2 border-b border-[var(--border)] p-3">
-        <div className="relative">
+        <div className="relative w-full" ref={menuRef}>
+          <button
+            type="button"
+            className={cn(
+              controlClass,
+              "flex w-full items-center gap-1.5 px-2 text-left",
+            )}
+            aria-haspopup="listbox"
+            aria-expanded={menuOpen}
+            aria-label="Icon library"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <LibraryMark svg={getLibraryLogo(library)} />
+            <span className="min-w-0 flex-1 truncate">{activeLabel}</span>
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)] transition-transform duration-150",
+                menuOpen && "rotate-180",
+              )}
+            />
+          </button>
+          {menuOpen && (
+            <ul
+              role="listbox"
+              className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-auto rounded-md border border-[var(--border)] bg-white py-1 shadow-md"
+            >
+              <LibraryOption
+                label="All libraries"
+                svg={getLibraryLogo("all")}
+                active={library === "all"}
+                onSelect={() => {
+                  setLibrary("all");
+                  setMenuOpen(false);
+                }}
+              />
+              {LIBRARIES.map((l) => (
+                <LibraryOption
+                  key={l.id}
+                  label={l.name}
+                  svg={getLibraryLogo(l.id)}
+                  active={library === l.id}
+                  onSelect={() => {
+                    setLibrary(l.id);
+                    setMenuOpen(false);
+                  }}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="relative w-full">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]" />
           <input
             value={query}
@@ -224,75 +274,22 @@ export function IconBrowser() {
           />
         </div>
 
-        <div className="flex gap-1.5">
-          <div className="relative min-w-0 flex-1" ref={menuRef}>
-            <button
-              type="button"
-              className={cn(
-                controlClass,
-                "flex w-full items-center gap-1.5 px-2 text-left",
-              )}
-              aria-haspopup="listbox"
-              aria-expanded={menuOpen}
-              aria-label="Icon library"
-              onClick={() => setMenuOpen((v) => !v)}
-            >
-              <LibraryMark svg={getLibraryLogo(library)} />
-              <span className="min-w-0 flex-1 truncate">{activeLabel}</span>
-              <ChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)] transition-transform duration-150",
-                  menuOpen && "rotate-180",
-                )}
-              />
-            </button>
-            {menuOpen && (
-              <ul
-                role="listbox"
-                className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-auto rounded-md border border-[var(--border)] bg-white py-1 shadow-md"
-              >
-                <LibraryOption
-                  label="All libraries"
-                  svg={getLibraryLogo("all")}
-                  active={library === "all"}
-                  onSelect={() => {
-                    setLibrary("all");
-                    setMenuOpen(false);
-                  }}
-                />
-                {LIBRARIES.map((l) => (
-                  <LibraryOption
-                    key={l.id}
-                    label={l.name}
-                    svg={getLibraryLogo(l.id)}
-                    active={library === l.id}
-                    onSelect={() => {
-                      setLibrary(l.id);
-                      setMenuOpen(false);
-                    }}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <label
-            className={cn(
-              controlClass,
-              "inline-flex cursor-pointer items-center gap-1.5 px-2.5 text-[var(--text-secondary)] hover:text-[var(--text)]",
-            )}
-          >
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".svg,image/svg+xml"
-              className="hidden"
-              onChange={(e) => void onUpload(e.target.files?.[0])}
-            />
-            <Upload className="h-3.5 w-3.5" />
-            Upload
-          </label>
-        </div>
+        <label
+          className={cn(
+            controlClass,
+            "flex w-full cursor-pointer items-center justify-center gap-1.5 px-2.5 text-[var(--text-secondary)] hover:text-[var(--text)]",
+          )}
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".svg,image/svg+xml"
+            className="hidden"
+            onChange={(e) => void onUpload(e.target.files?.[0])}
+          />
+          <Upload className="h-3.5 w-3.5" />
+          Upload
+        </label>
 
         {uploadError && (
           <p className="text-[11px] text-red-600" role="alert">
@@ -300,35 +297,19 @@ export function IconBrowser() {
           </p>
         )}
 
-        <div className="flex gap-1.5">
+        {hasIcon && hasText && (
           <button
             type="button"
-            onClick={() => {
-              addTextLayer("Label");
-              // Text action must not change browser chrome
-            }}
+            onClick={() => clearIconKeepText()}
             className={cn(
               controlClass,
-              "inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 px-2 font-medium",
+              "w-full px-2 text-[var(--text-secondary)] hover:text-[var(--text)]",
             )}
+            title="Remove icon, keep text"
           >
-            <Type className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-            Add text
+            Icon off
           </button>
-          {hasIcon && hasText && (
-            <button
-              type="button"
-              onClick={() => clearIconKeepText()}
-              className={cn(
-                controlClass,
-                "shrink-0 px-2 text-[var(--text-secondary)] hover:text-[var(--text)]",
-              )}
-              title="Remove icon, keep text"
-            >
-              Icon off
-            </button>
-          )}
-        </div>
+        )}
 
         {showVariantBar && (
           <div className="flex flex-wrap gap-1" data-testid="icon-variant-bar">
