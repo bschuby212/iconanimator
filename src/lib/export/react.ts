@@ -1,4 +1,10 @@
-import type { AnimationDocument, ParsedSvg, SvgComponent } from "@/lib/animation/types";
+import type {
+  AnimationDocument,
+  FrameSettings,
+  ParsedSvg,
+  SvgComponent,
+} from "@/lib/animation/types";
+import { DEFAULT_FRAME } from "@/lib/animation/types";
 import { serializeElementsToSvg } from "@/lib/svg/parse";
 
 export function exportReactComponent(
@@ -6,16 +12,19 @@ export function exportReactComponent(
   doc: AnimationDocument,
   components: SvgComponent[],
   componentName = "AnimatedIcon",
+  frame: FrameSettings = DEFAULT_FRAME,
 ): string {
   const svg = serializeElementsToSvg(parsed);
   const tracksJson = JSON.stringify(doc, null, 2);
   const componentsJson = JSON.stringify(components, null, 2);
+  const frameJson = JSON.stringify(frame);
 
   return `"use client";
 import { useEffect, useMemo, useState } from "react";
 
 const animation = ${tracksJson} as const;
 const components = ${componentsJson} as const;
+const frame = ${frameJson} as const;
 const rawSvg = ${JSON.stringify(svg)};
 
 function sampleAt(time: number) {
@@ -47,8 +56,8 @@ function sampleAt(time: number) {
 }
 
 export default function ${componentName}({
-  width = 48,
-  height = 48,
+  width = frame.size,
+  height = frame.size,
   playing = true,
 }: {
   width?: number;
@@ -58,40 +67,58 @@ export default function ${componentName}({
   const [time, setTime] = useState(0);
   useEffect(() => {
     if (!playing) return;
-    let frame = 0;
+    let raf = 0;
     let start = performance.now();
     const tick = (now: number) => {
       const elapsed = (now - start) * animation.playbackSpeed;
       const t = animation.loop ? elapsed % animation.duration : Math.min(elapsed, animation.duration);
       setTime(t);
-      frame = requestAnimationFrame(tick);
+      raf = requestAnimationFrame(tick);
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [playing]);
 
   const transforms = useMemo(() => sampleAt(time), [time]);
+  const pad = frame.padding;
+  const inner = Math.max(8, Math.min(width, height) - pad * 2);
+  const bg = frame.background === "transparent" ? "transparent" : frame.background;
 
   return (
     <div
-      style={{ width, height }}
-      dangerouslySetInnerHTML={{ __html: rawSvg }}
-      ref={(node) => {
-        if (!node) return;
-        const svgEl = node.querySelector("svg");
-        if (!svgEl) return;
-        svgEl.setAttribute("width", String(width));
-        svgEl.setAttribute("height", String(height));
-        for (const [id, t] of Object.entries(transforms)) {
-          const el = svgEl.querySelector(\`[data-animator-id="\${id}"]\`) as SVGElement | null;
-          if (!el) continue;
-          el.style.transformOrigin = "center";
-          el.style.transformBox = "fill-box";
-          el.style.transform = \`translate(\${t.x}px, \${t.y}px) rotate(\${t.rotation}deg) scale(\${t.scaleX}, \${t.scaleY})\`;
-          el.style.opacity = String(t.opacity);
-        }
+      style={{
+        width,
+        height,
+        boxSizing: "border-box",
+        padding: pad,
+        borderRadius: frame.radius,
+        background: bg,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
       }}
-    />
+    >
+      <div
+        style={{ width: inner, height: inner }}
+        dangerouslySetInnerHTML={{ __html: rawSvg }}
+        ref={(node) => {
+          if (!node) return;
+          const svgEl = node.querySelector("svg");
+          if (!svgEl) return;
+          svgEl.setAttribute("width", String(inner));
+          svgEl.setAttribute("height", String(inner));
+          for (const [id, t] of Object.entries(transforms)) {
+            const el = svgEl.querySelector(\`[data-animator-id="\${id}"]\`) as SVGElement | null;
+            if (!el) continue;
+            el.style.transformOrigin = "center";
+            el.style.transformBox = "fill-box";
+            el.style.transform = \`translate(\${t.x}px, \${t.y}px) rotate(\${t.rotation}deg) scale(\${t.scaleX}, \${t.scaleY})\`;
+            el.style.opacity = String(t.opacity);
+          }
+        }}
+      />
+    </div>
   );
 }
 `;

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   Check,
   Download,
+  FilePlus,
+  History,
   MoreHorizontal,
   PanelLeft,
   Pencil,
@@ -16,6 +18,7 @@ import { AnimationCanvas } from "@/components/canvas/AnimationCanvas";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { Timeline } from "@/components/layout/Timeline";
 import { ExportDialog } from "@/components/export/ExportDialog";
+import { HistoryModal } from "@/components/layout/HistoryModal";
 import { Button } from "@/components/ui/button";
 import { useProjectStore } from "@/store/project-store";
 import { listProjects, loadProject } from "@/lib/persistence/db";
@@ -28,6 +31,7 @@ export function AppShell() {
   const setRightOpen = useProjectStore((s) => s.setRightOpen);
   const setTimelineHeight = useProjectStore((s) => s.setTimelineHeight);
   const setExportOpen = useProjectStore((s) => s.setExportOpen);
+  const setHistoryOpen = useProjectStore((s) => s.setHistoryOpen);
   const setProjectName = useProjectStore((s) => s.setProjectName);
   const persist = useProjectStore((s) => s.persist);
   const loadProjectState = useProjectStore((s) => s.loadProjectState);
@@ -48,6 +52,18 @@ export function AppShell() {
     }, 1200);
     return () => window.clearTimeout(t);
   }, [project, persist]);
+
+  // Expose store for Playwright / QA scripts (read-only inspection + actions)
+  useEffect(() => {
+    (
+      window as unknown as {
+        __ICON_ANIMATOR__?: typeof useProjectStore;
+      }
+    ).__ICON_ANIMATOR__ = useProjectStore;
+    return () => {
+      delete (window as unknown as { __ICON_ANIMATOR__?: unknown }).__ICON_ANIMATOR__;
+    };
+  }, []);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -94,9 +110,15 @@ export function AppShell() {
           <PanelLeft className="h-4 w-4" />
         </button>
         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#0f9f8a] text-[10px] font-bold text-white">
-            Ai
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/app-logo.png"
+            alt="Icon Animator"
+            width={24}
+            height={24}
+            className="h-6 w-6 shrink-0 rounded-[6px]"
+            draggable={false}
+          />
           {editingTitle ? (
             <div className="flex min-w-0 items-center gap-1">
               <input
@@ -171,7 +193,7 @@ export function AppShell() {
                 <MoreHorizontal className="h-4 w-4" />
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-44 rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg">
-                <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+                <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium text-[var(--text-secondary)]">
                   File
                 </p>
                 <button
@@ -244,13 +266,36 @@ export function AppShell() {
           </div>
           <Button
             size="sm"
+            variant="ghost"
+            className="ml-1"
+            onClick={() => newProject()}
+            data-testid="new-file-cta"
+            title="New file"
+          >
+            <FilePlus className="h-3.5 w-3.5" />
+            New file
+          </Button>
+          <Button
+            size="sm"
             variant="primary"
             className="ml-1"
             disabled={!project.animation}
             onClick={() => setExportOpen(true)}
+            data-testid="export-cta"
+            title="Export Lottie JSON"
           >
             <Download className="h-3.5 w-3.5" />
-            Export
+            Export Lottie
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-1"
+            onClick={() => setHistoryOpen(true)}
+            data-testid="history-cta"
+          >
+            <History className="h-3.5 w-3.5" />
+            History
           </Button>
         </div>
       </header>
@@ -305,6 +350,7 @@ export function AppShell() {
       </div>
 
       <ExportDialog />
+      <HistoryModal />
     </div>
   );
 }

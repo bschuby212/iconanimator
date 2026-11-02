@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "@/store/project-store";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,10 +13,10 @@ import { exportCssAnimation } from "@/lib/export/css";
 import { exportLottieJson } from "@/lib/export/lottie";
 
 const FORMATS: { id: ExportFormat; label: string; priority: number }[] = [
-  { id: "react", label: "React component", priority: 1 },
-  { id: "svg", label: "Animated SVG", priority: 2 },
-  { id: "css", label: "CSS animation", priority: 3 },
-  { id: "lottie", label: "Lottie JSON", priority: 4 },
+  { id: "lottie", label: "Lottie JSON", priority: 1 },
+  { id: "react", label: "React component", priority: 2 },
+  { id: "svg", label: "Animated SVG", priority: 3 },
+  { id: "css", label: "CSS animation", priority: 4 },
   { id: "gif", label: "GIF", priority: 5 },
   { id: "mp4", label: "MP4", priority: 6 },
   { id: "webm", label: "WebM", priority: 7 },
@@ -27,7 +27,7 @@ export function ExportDialog() {
   const open = useProjectStore((s) => s.ui.exportOpen);
   const setExportOpen = useProjectStore((s) => s.setExportOpen);
   const project = useProjectStore((s) => s.project);
-  const [format, setFormat] = useState<ExportFormat>("react");
+  const [format, setFormat] = useState<ExportFormat>("lottie");
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
@@ -35,6 +35,15 @@ export function ExportDialog() {
     if (!project.animation) return null;
     return validateExportCompatibility(project.animation, format);
   }, [project.animation, format]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExportOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, setExportOpen]);
 
   if (!open) return null;
 
@@ -68,10 +77,16 @@ export function ExportDialog() {
           project.parsed,
           project.animation,
           project.components,
+          "AnimatedIcon",
+          project.frame,
         );
         download("AnimatedIcon.tsx", code, "text/plain");
       } else if (format === "svg") {
-        const svg = exportAnimatedSvg(project.parsed, project.animation);
+        const svg = exportAnimatedSvg(
+          project.parsed,
+          project.animation,
+          project.frame,
+        );
         download("animated-icon.svg", svg, "image/svg+xml");
       } else if (format === "css") {
         download(
@@ -104,8 +119,20 @@ export function ExportDialog() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl ring-1 ring-[var(--border)]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      role="presentation"
+      onClick={() => setExportOpen(false)}
+      data-testid="export-dialog-backdrop"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export"
+        data-testid="export-dialog"
+        className="w-full max-w-md rounded-xl bg-white shadow-xl ring-1 ring-[var(--border)]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h2 className="text-sm font-semibold">Export</h2>
           <Button size="sm" variant="ghost" onClick={() => setExportOpen(false)}>

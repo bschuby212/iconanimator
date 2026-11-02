@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import type { ParsedSvg, SvgElementNode } from "@/lib/animation/types";
 import { sanitizeSvg } from "./sanitize";
-import { splitPathData } from "./path-split";
+import { splitIntoLayerPaths } from "./path-split";
 
 function parseAttributes(el: Element): Record<string, string> {
   const attrs: Record<string, string> = {};
@@ -9,6 +9,26 @@ function parseAttributes(el: Element): Record<string, string> {
     attrs[attr.name] = attr.value;
   }
   return attrs;
+}
+
+function resolvePaint(
+  el: Element,
+  inherited: { fill?: string; stroke?: string } = {},
+): { fill: string; stroke: string; filled: boolean } {
+  const fill = (el.getAttribute("fill") || inherited.fill || "").toLowerCase();
+  const stroke = el.getAttribute("stroke") || inherited.stroke || "";
+  const filled = !(fill === "none" || fill === "transparent");
+  return { fill, stroke, filled };
+}
+
+/** Split compound paths into layer-ready pieces (hole-aware when filled). */
+function layerPathSegments(
+  d: string,
+  el: Element,
+  inherited: { fill?: string; stroke?: string } = {},
+): string[] {
+  const { filled } = resolvePaint(el, inherited);
+  return splitIntoLayerPaths(d, { filled });
 }
 
 function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
@@ -35,10 +55,11 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
 
     if (tag === "path" && splitPaths) {
       const d = child.getAttribute("d") || "";
-      const subpaths = splitPathData(d);
+      const subpaths = layerPathSegments(d, child);
       if (subpaths.length > 1) {
         const baseAttrs = parseAttributes(child);
         delete baseAttrs.d;
+        // Keep original fill-rule (Phosphor nonzero winding / Hero evenodd)
         for (const sub of subpaths) {
           const id = `el_${nanoid(8)}`;
           const node: SvgElementNode = {
@@ -57,25 +78,52 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
 
     if (tag === "g") {
       const groupId = `el_${nanoid(8)}`;
+      const groupAttrs = parseAttributes(child);
       const group: SvgElementNode = {
         id: groupId,
         tag: "g",
-        attributes: parseAttributes(child),
+        attributes: groupAttrs,
         children: [],
         originalId: child.getAttribute("id") || undefined,
+      };
+      const inherited = {
+        fill: groupAttrs.fill,
+        stroke: groupAttrs.stroke,
       };
       for (const gc of Array.from(child.children)) {
         if (gc.tagName.toLowerCase() === "path" && splitPaths) {
           const d = gc.getAttribute("d") || "";
-          const subpaths = splitPathData(d);
+          const subpaths = layerPathSegments(d, gc, inherited);
           const baseAttrs = parseAttributes(gc);
           delete baseAttrs.d;
-          for (const sub of subpaths) {
+          // Inherit stroke/fill from group when missing on the path
+          if (!baseAttrs.fill && inherited.fill) baseAttrs.fill = inherited.fill;
+          if (!baseAttrs.stroke && inherited.stroke) {
+            baseAttrs.stroke = inherited.stroke;
+          }
+          if (subpaths.length > 1) {
+            for (const sub of subpaths) {
+              const id = `el_${nanoid(8)}`;
+              const node: SvgElementNode = {
+                id,
+                tag: "path",
+                attributes: { ...baseAttrs, d: sub },
+                children: [],
+                parentId: groupId,
+                originalId: gc.getAttribute("id") || undefined,
+              };
+              group.children.push(node);
+              elementMap[id] = node;
+            }
+          } else {
             const id = `el_${nanoid(8)}`;
             const node: SvgElementNode = {
               id,
               tag: "path",
-              attributes: { ...baseAttrs, d: sub },
+              attributes: {
+                ...baseAttrs,
+                d: subpaths[0] ?? d,
+              },
               children: [],
               parentId: groupId,
               originalId: gc.getAttribute("id") || undefined,
@@ -97,8 +145,17 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
           elementMap[id] = node;
         }
       }
-      elements.push(group);
-      elementMap[groupId] = group;
+      // Flatten trivial groups: promote children so Layers panel lists real paths
+      if (group.children.length > 0) {
+        for (const childNode of group.children) {
+          delete childNode.parentId;
+          elements.push(childNode);
+        }
+        // Keep group in elementMap only if needed; prefer flat layer list
+      } else {
+        elements.push(group);
+        elementMap[groupId] = group;
+      }
       continue;
     }
 
@@ -109,7 +166,27 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
       attributes: parseAttributes(child),
       children: [],
       originalId: child.getAttribute("id") || undefined,
+      ...(tag === "text" || tag === "tspan"
+        ? { textContent: child.textContent ?? "" }
+        : {}),
     };
+    // Nested tspans under text
+    if (tag === "text") {
+      for (const tc of Array.from(child.children)) {
+        if (tc.tagName.toLowerCase() !== "tspan") continue;
+        const tid = `el_${nanoid(8)}`;
+        const tnode: SvgElementNode = {
+          id: tid,
+          tag: "tspan",
+          attributes: parseAttributes(tc),
+          children: [],
+          parentId: id,
+          textContent: tc.textContent ?? "",
+        };
+        node.children.push(tnode);
+        elementMap[tid] = tnode;
+      }
+    }
     elements.push(node);
     elementMap[id] = node;
   }
@@ -135,20 +212,29 @@ function parseLightweight(svg: string, splitPaths: boolean): ParsedSvg {
   const elements: SvgElementNode[] = [];
   const elementMap: Record<string, SvgElementNode> = {};
 
-  // Extract path elements
+  // Extract path elements (fill-aware layer split, same as DOM parser)
   const pathRe = /<path\b([^>]*)\/?>/gi;
   let m: RegExpExecArray | null;
   while ((m = pathRe.exec(sanitized)) !== null) {
     const attrStr = m[1];
     const attrs = parseAttrString(attrStr);
     const d = attrs.d || "";
-    const subs = splitPaths ? splitPathData(d) : [d];
+    const fill = (attrs.fill || "").toLowerCase();
+    const filled = !(fill === "none" || fill === "transparent");
+    // Heuristic: group-level fill="none" often lives on a parent <g>; if the
+    // path itself has a stroke and no fill, treat as unfilled stroke layering.
+    const strokeOnly = !!attrs.stroke && (!fill || fill === "none");
+    const subs = splitPaths
+      ? splitIntoLayerPaths(d, { filled: filled && !strokeOnly })
+      : [d];
+    const base = { ...attrs };
+    delete base.d;
     for (const sub of subs) {
       const id = `el_${nanoid(8)}`;
       const node: SvgElementNode = {
         id,
         tag: "path",
-        attributes: { ...attrs, d: sub },
+        attributes: { ...base, d: sub },
         children: [],
       };
       elements.push(node);
@@ -198,6 +284,8 @@ export function parseSvg(
   svg: string,
   options: { splitPaths?: boolean } = {},
 ): ParsedSvg {
+  // Default ON for component recognition. splitPathData converts relative
+  // movetos to absolute so subpaths keep correct positions when separated.
   const splitPaths = options.splitPaths !== false;
   if (typeof DOMParser !== "undefined") {
     return parseWithDom(svg, splitPaths);

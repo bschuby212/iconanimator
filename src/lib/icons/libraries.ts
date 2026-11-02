@@ -1,5 +1,11 @@
 import { getIconData, iconToSVG } from "@iconify/utils";
 import type { IconifyJSON } from "@iconify/types";
+import {
+  parseIconVariant,
+  pickDefaultVariant,
+  preferredVariantOrder,
+  variantLabel,
+} from "./variants";
 
 export type LibraryId =
   | "tabler"
@@ -7,33 +13,94 @@ export type LibraryId =
   | "feather"
   | "heroicons"
   | "ph"
-  | "hugeicons";
+  | "iconoir"
+  | "bi"
+  | "material-symbols";
 
 export interface LibraryMeta {
   id: LibraryId;
   name: string;
+  /** SPDX / human license note for the official icon set */
   license: string;
   prefix: string;
+  /** Whether this set commonly exposes style weights/variants */
+  hasVariants: boolean;
 }
 
+/**
+ * Official Iconify JSON packs — raw SVG path geometry (not React icon components).
+ *
+ * Remix Icon is intentionally omitted: Remix Icon License v1.0 (2026) prohibits
+ * redistributing the set as part of a competing / primary icon library product.
+ */
 export const LIBRARIES: LibraryMeta[] = [
-  { id: "tabler", name: "Tabler Icons", license: "MIT", prefix: "tabler" },
-  { id: "lucide", name: "Lucide", license: "ISC", prefix: "lucide" },
-  { id: "feather", name: "Feather Icons", license: "MIT", prefix: "feather" },
-  { id: "heroicons", name: "Heroicons", license: "MIT", prefix: "heroicons" },
-  { id: "ph", name: "Phosphor Icons", license: "MIT", prefix: "ph" },
   {
-    id: "hugeicons",
-    name: "Hugeicons Free",
-    license: "MIT-like (check package)",
-    prefix: "hugeicons",
+    id: "ph",
+    name: "Phosphor Icons",
+    license: "MIT",
+    prefix: "ph",
+    hasVariants: true,
+  },
+  {
+    id: "tabler",
+    name: "Tabler Icons",
+    license: "MIT",
+    prefix: "tabler",
+    hasVariants: false,
+  },
+  {
+    id: "lucide",
+    name: "Lucide",
+    license: "ISC",
+    prefix: "lucide",
+    hasVariants: false,
+  },
+  {
+    id: "heroicons",
+    name: "Heroicons",
+    license: "MIT",
+    prefix: "heroicons",
+    hasVariants: true,
+  },
+  {
+    id: "feather",
+    name: "Feather",
+    license: "MIT",
+    prefix: "feather",
+    hasVariants: false,
+  },
+  {
+    id: "iconoir",
+    name: "Iconoir",
+    license: "MIT",
+    prefix: "iconoir",
+    hasVariants: false,
+  },
+  {
+    id: "bi",
+    name: "Bootstrap Icons",
+    license: "MIT",
+    prefix: "bi",
+    hasVariants: false,
+  },
+  {
+    id: "material-symbols",
+    name: "Material Symbols",
+    license: "Apache-2.0",
+    prefix: "material-symbols",
+    hasVariants: true,
   },
 ];
 
 const collectionCache: Partial<Record<LibraryId, IconifyJSON>> = {};
 
 function asIconifyJSON(mod: Record<string, unknown>): IconifyJSON | null {
-  if (mod.icons && typeof mod.icons === "object" && "icons" in (mod.icons as object)) {
+  // @iconify-json/* exports { icons: IconifyJSON, info, metadata, chars }
+  if (
+    mod.icons &&
+    typeof mod.icons === "object" &&
+    "icons" in (mod.icons as object)
+  ) {
     return mod.icons as IconifyJSON;
   }
   if (mod.prefix && mod.icons) {
@@ -65,9 +132,15 @@ async function loadCollection(id: LibraryId): Promise<IconifyJSON | null> {
       case "ph":
         mod = await import("@iconify-json/ph");
         break;
-      case "hugeicons":
-        // Hugeicons free may not ship as iconify-json; degrade gracefully
-        return null;
+      case "iconoir":
+        mod = await import("@iconify-json/iconoir");
+        break;
+      case "bi":
+        mod = await import("@iconify-json/bi");
+        break;
+      case "material-symbols":
+        mod = await import("@iconify-json/material-symbols");
+        break;
       default:
         return null;
     }
@@ -80,125 +153,226 @@ async function loadCollection(id: LibraryId): Promise<IconifyJSON | null> {
   }
 }
 
+export interface IconVariantRecord {
+  id: string;
+  label: string;
+  /** Original Iconify icon name within the pack */
+  iconName: string;
+  svg: string;
+}
+
+/** Unique browsable icon (variants collapsed). */
 export interface IconRecord {
   id: string;
   name: string;
   library: LibraryId;
   libraryName: string;
+  /** Preview SVG for the default variant */
   svg: string;
   keywords: string[];
+  defaultVariant: string;
+  variants: IconVariantRecord[];
 }
 
+/**
+ * Wrap Iconify body without forcing stroke/fill on the root.
+ */
 function bodyToSvg(body: string, viewBox = "0 0 24 24"): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${body}</svg>`;
+}
+
+function renderIconSvg(col: IconifyJSON, iconName: string): string | null {
+  const data = getIconData(col, iconName);
+  if (!data) return null;
+  const rendered = iconToSVG(data, { height: "auto" });
+  return bodyToSvg(rendered.body, rendered.attributes.viewBox || "0 0 24 24");
+}
+
+type FamilyAccum = {
+  name: string;
+  library: LibraryId;
+  libraryName: string;
+  variants: Map<string, { iconName: string; svg: string }>;
+};
+
+function buildFamilies(
+  lib: LibraryMeta,
+  col: IconifyJSON,
+): Map<string, FamilyAccum> {
+  const families = new Map<string, FamilyAccum>();
+  for (const iconName of Object.keys(col.icons ?? {})) {
+    if (!getIconData(col, iconName)) continue;
+    const { base, variant } = parseIconVariant(lib.id, iconName);
+    const key = `${lib.id}:${base}`;
+    let fam = families.get(key);
+    if (!fam) {
+      fam = {
+        name: base,
+        library: lib.id,
+        libraryName: lib.name,
+        variants: new Map(),
+      };
+      families.set(key, fam);
+    }
+    // Prefer first SVG for a variant; skip duplicates
+    if (!fam.variants.has(variant)) {
+      const svg = renderIconSvg(col, iconName);
+      if (svg) fam.variants.set(variant, { iconName, svg });
+    }
+  }
+  return families;
+}
+
+function familyToRecord(fam: FamilyAccum): IconRecord | null {
+  const variantIds = [...fam.variants.keys()];
+  if (!variantIds.length) return null;
+  const defaultVariant = pickDefaultVariant(fam.library, variantIds);
+  const ordered = preferredVariantOrder(fam.library).filter((v) =>
+    fam.variants.has(v),
+  );
+  for (const v of variantIds) {
+    if (!ordered.includes(v)) ordered.push(v);
+  }
+  const variants: IconVariantRecord[] = ordered.map((v) => {
+    const entry = fam.variants.get(v)!;
+    return {
+      id: v,
+      label: variantLabel(v),
+      iconName: entry.iconName,
+      svg: entry.svg,
+    };
+  });
+  const def = fam.variants.get(defaultVariant) ?? [...fam.variants.values()][0];
+  if (!def) return null;
+  return {
+    id: `${fam.library}:${fam.name}`,
+    name: fam.name,
+    library: fam.library,
+    libraryName: fam.libraryName,
+    svg: def.svg,
+    keywords: fam.name.split("-"),
+    defaultVariant,
+    variants,
+  };
+}
+
+export { getLibraryLogo as getLibraryMarkSvg } from "./library-logos";
+
+export async function getLibraryIconCount(
+  library: LibraryId,
+): Promise<{ total: number; unique: number }> {
+  const col = await loadCollection(library);
+  if (!col?.icons) return { total: 0, unique: 0 };
+  const lib = LIBRARIES.find((l) => l.id === library)!;
+  const families = buildFamilies(lib, col);
+  return { total: Object.keys(col.icons).length, unique: families.size };
 }
 
 export async function searchIcons(
   query: string,
   libraryFilter: LibraryId | "all" = "all",
   limit = 80,
+  offset = 0,
 ): Promise<IconRecord[]> {
   const q = query.trim().toLowerCase();
   const libs =
     libraryFilter === "all"
-      ? LIBRARIES.filter((l) => l.id !== "hugeicons")
+      ? LIBRARIES
       : LIBRARIES.filter((l) => l.id === libraryFilter);
 
   const results: IconRecord[] = [];
+  const skip = Math.max(0, offset);
+  let skipped = 0;
+
+  const take = (rec: IconRecord) => {
+    if (results.length >= limit) return true;
+    if (skipped < skip) {
+      skipped += 1;
+      return false;
+    }
+    results.push(rec);
+    return results.length >= limit;
+  };
 
   for (const lib of libs) {
     const col = await loadCollection(lib.id);
     if (!col?.icons) continue;
+    const families = buildFamilies(lib, col);
 
-    const starters = [
-      "settings",
-      "trash",
-      "pencil",
-      "edit",
-      "bell",
-      "lock",
-      "mail",
-      "download",
-      "search",
-      "heart",
-      "star",
-      "home",
-      "user",
-      "check",
-      "x",
-      "plus",
-      "menu",
-      "file",
-      "folder",
-      "camera",
-    ];
+    const records: IconRecord[] = [];
+    for (const fam of families.values()) {
+      const rec = familyToRecord(fam);
+      if (rec) records.push(rec);
+    }
 
-    // Browse without query: curated starter set first
     if (!q) {
-      for (const name of starters) {
-        const data = getIconData(col, name);
-        if (!data) continue;
-        const rendered = iconToSVG(data, { height: "auto" });
-        results.push({
-          id: `${lib.id}:${name}`,
-          name,
-          library: lib.id,
-          libraryName: lib.name,
-          svg: bodyToSvg(
-            rendered.body,
-            rendered.attributes.viewBox || "0 0 24 24",
-          ),
-          keywords: name.split("-"),
-        });
-        if (results.length >= limit) return results;
+      records.sort((a, b) => a.name.localeCompare(b.name));
+      // Single library browse
+      if (libraryFilter !== "all") {
+        for (const rec of records.slice(skip, skip + limit)) {
+          results.push(rec);
+        }
+        return results;
+      }
+      // All libraries: take a balanced slice of starters then alpha
+      const starters = [
+        "house",
+        "home",
+        "heart",
+        "star",
+        "settings",
+        "gear",
+        "user",
+        "bell",
+        "trash",
+        "search",
+        "mail",
+        "lock",
+      ];
+      for (const s of starters) {
+        const hit = records.find((r) => r.name === s);
+        if (hit && take(hit)) return results;
+      }
+      for (const rec of records) {
+        if (starters.includes(rec.name)) continue;
+        if (take(rec)) return results;
       }
       continue;
     }
 
-    const names = Object.keys(col.icons);
-    const scored: { name: string; score: number }[] = [];
-    for (const name of names) {
+    const scored: { rec: IconRecord; score: number }[] = [];
+    for (const rec of records) {
+      const name = rec.name;
       if (name === q) {
-        scored.push({ name, score: 100 });
+        scored.push({ rec, score: 100 });
         continue;
       }
       if (name.startsWith(q)) {
-        scored.push({ name, score: 80 });
+        scored.push({ rec, score: 80 });
         continue;
       }
       if (name.includes(q)) {
-        scored.push({ name, score: 60 });
+        scored.push({ rec, score: 60 });
         continue;
       }
       const parts = name.split("-");
       if (parts.some((p) => p === q)) {
-        scored.push({ name, score: 70 });
+        scored.push({ rec, score: 70 });
         continue;
       }
       if (q.length >= 3 && parts.some((p) => p.startsWith(q))) {
-        scored.push({ name, score: 40 });
+        scored.push({ rec, score: 40 });
       }
     }
-    scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-    for (const { name } of scored) {
-      const data = getIconData(col, name);
-      if (!data) continue;
-      const rendered = iconToSVG(data, { height: "auto" });
-      const vb = rendered.attributes.viewBox || "0 0 24 24";
-      const svg = bodyToSvg(rendered.body, vb);
-      results.push({
-        id: `${lib.id}:${name}`,
-        name,
-        library: lib.id,
-        libraryName: lib.name,
-        svg,
-        keywords: name.split("-"),
-      });
-      if (results.length >= limit) return results;
+    scored.sort(
+      (a, b) => b.score - a.score || a.rec.name.localeCompare(b.rec.name),
+    );
+    for (const { rec } of scored) {
+      if (take(rec)) return results;
     }
   }
 
-  return results.slice(0, limit);
+  return results;
 }
 
 export async function getIconSvg(
@@ -207,10 +381,20 @@ export async function getIconSvg(
 ): Promise<string | null> {
   const col = await loadCollection(library);
   if (!col) return null;
-  const data = getIconData(col, name);
-  if (!data) return null;
-  const rendered = iconToSVG(data, { height: "auto" });
-  return bodyToSvg(rendered.body, rendered.attributes.viewBox || "0 0 24 24");
+  return renderIconSvg(col, name);
+}
+
+export async function getIconFamily(
+  library: LibraryId,
+  baseName: string,
+): Promise<IconRecord | null> {
+  const col = await loadCollection(library);
+  if (!col) return null;
+  const lib = LIBRARIES.find((l) => l.id === library);
+  if (!lib) return null;
+  const families = buildFamilies(lib, col);
+  const fam = families.get(`${library}:${baseName}`);
+  return fam ? familyToRecord(fam) : null;
 }
 
 /** Sync helper for tests using require-friendly collections */
@@ -231,16 +415,25 @@ export function getIconSvgSync(
     "prefix" in collection && "icons" in collection
       ? (collection as IconifyJSON)
       : resolveIconifyJSON(collection);
-  const data = getIconData(set, name);
-  if (!data) return null;
-  const rendered = iconToSVG(data, { height: "auto" });
+  const svg = renderIconSvg(set, name);
+  if (!svg) return null;
   const lib = LIBRARIES.find((l) => l.id === library)!;
+  const { base, variant } = parseIconVariant(library, name);
   return {
-    id: `${library}:${name}`,
-    name,
+    id: `${library}:${base}`,
+    name: base,
     library,
     libraryName: lib.name,
-    svg: bodyToSvg(rendered.body, rendered.attributes.viewBox || "0 0 24 24"),
-    keywords: name.split("-"),
+    svg,
+    keywords: base.split("-"),
+    defaultVariant: variant,
+    variants: [
+      {
+        id: variant,
+        label: variantLabel(variant),
+        iconName: name,
+        svg,
+      },
+    ],
   };
 }
