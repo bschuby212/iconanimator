@@ -81,3 +81,248 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #a3a3a3;
 }
+
+/* Motions panel — looping demos of the selected icon */
+.motion-demo-icon {
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+@keyframes md-move-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+}
+@keyframes md-move-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+}
+@keyframes md-move-up {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes md-move-down {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(6px);
+  }
+}
+@keyframes md-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes md-rotate-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+@keyframes md-scale-up {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+}
+@keyframes md-scale-down {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.7);
+  }
+}
+@keyframes md-skew-x {
+  0%,
+  100% {
+    transform: skewX(0deg);
+  }
+  50% {
+    transform: skewX(12deg);
+  }
+}
+@keyframes md-fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes md-fade-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.15;
+  }
+}
+@keyframes md-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes md-disappear {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes md-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+@keyframes md-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-7px);
+  }
+  60% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes md-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+@keyframes md-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes md-pop {
+  0% {
+    transform: scale(0.5);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes md-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-10deg);
+  }
+  75% {
+    transform: rotate(10deg);
+  }
+}
+
+.motion-demo--move-x {
+  animation: md-move-x 1.2s ease-in-out infinite;
+}
+.motion-demo--move-y {
+  animation: md-move-y 1.2s ease-in-out infinite;
+}
+.motion-demo--move-up {
+  animation: md-move-up 1.2s ease-in-out infinite;
+}
+.motion-demo--move-down {
+  animation: md-move-down 1.2s ease-in-out infinite;
+}
+.motion-demo--rotate {
+  animation: md-rotate 1.6s linear infinite;
+}
+.motion-demo--rotate-ccw {
+  animation: md-rotate-ccw 1.6s linear infinite;
+}
+.motion-demo--scale-up {
+  animation: md-scale-up 1.2s ease-in-out infinite;
+}
+.motion-demo--scale-down {
+  animation: md-scale-down 1.2s ease-in-out infinite;
+}
+.motion-demo--skew-x {
+  animation: md-skew-x 1.2s ease-in-out infinite;
+}
+.motion-demo--fade-in {
+  animation: md-fade-in 1.4s ease-in-out infinite alternate;
+}
+.motion-demo--fade-out {
+  animation: md-fade-out 1.4s ease-in-out infinite alternate;
+}
+.motion-demo--appear {
+  animation: md-appear 1.4s ease-out infinite alternate;
+}
+.motion-demo--disappear {
+  animation: md-disappear 1.4s ease-in infinite alternate;
+}
+.motion-demo--pulse {
+  animation: md-pulse 1s ease-in-out infinite;
+}
+.motion-demo--bounce {
+  animation: md-bounce 0.9s ease-in-out infinite;
+}
+.motion-demo--shake {
+  animation: md-shake 0.5s ease-in-out infinite;
+}
+.motion-demo--float {
+  animation: md-float 1.6s ease-in-out infinite;
+}
+.motion-demo--pop {
+  animation: md-pop 1.2s ease-out infinite;
+}
+.motion-demo--wiggle {
+  animation: md-wiggle 0.8s ease-in-out infinite;
+}

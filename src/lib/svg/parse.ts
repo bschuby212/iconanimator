@@ -109,7 +109,27 @@ function parseWithDom(svg: string, splitPaths: boolean): ParsedSvg {
       attributes: parseAttributes(child),
       children: [],
       originalId: child.getAttribute("id") || undefined,
+      ...(tag === "text" || tag === "tspan"
+        ? { textContent: child.textContent ?? "" }
+        : {}),
     };
+    // Nested tspans under text
+    if (tag === "text") {
+      for (const tc of Array.from(child.children)) {
+        if (tc.tagName.toLowerCase() !== "tspan") continue;
+        const tid = `el_${nanoid(8)}`;
+        const tnode: SvgElementNode = {
+          id: tid,
+          tag: "tspan",
+          attributes: parseAttributes(tc),
+          children: [],
+          parentId: id,
+          textContent: tc.textContent ?? "",
+        };
+        node.children.push(tnode);
+        elementMap[tid] = tnode;
+      }
+    }
     elements.push(node);
     elementMap[id] = node;
   }

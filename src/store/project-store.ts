@@ -7,8 +7,10 @@ import {
   type AnimationDocument,
   type AnimationIntent,
   type AnimationPlan,
+  type ChatMessage,
   type CreationHistoryEntry,
   type IconSelection,
+  type ParsedSvg,
   type ProjectState,
   type SvgComponent,
 } from "@/lib/animation/types";
@@ -87,6 +89,11 @@ interface Store {
   setTransformOrigin: (
     componentId: string,
     origin: { x: number; y: number; absolute?: boolean },
+  ) => void;
+  addTextLayer: (content?: string) => void;
+  updateTextContent: (
+    componentId: string,
+    patch: { content?: string; fontSize?: number; fill?: string },
   ) => void;
   groupSelected: (name: string) => void;
   ungroup: (componentId: string) => void;
@@ -323,6 +330,98 @@ export const useProjectStore = create<Store>((set, get) => ({
         ),
       },
     })),
+
+  addTextLayer: (content = "Label") => {
+    const { project, ui } = get();
+    if (!project.parsed) return;
+    const [, , vbW = 24, vbH = 24] = project.parsed.viewBox
+      .split(/[\s,]+/)
+      .map(Number);
+    const elId = `el_${nanoid(8)}`;
+    const compId = `cmp_${nanoid(8)}`;
+    const textNode = {
+      id: elId,
+      tag: "text",
+      attributes: {
+        x: String(vbW / 2),
+        y: String(vbH + 10),
+        "font-size": "4",
+        "font-family": "ui-sans-serif, system-ui, sans-serif",
+        "text-anchor": "middle",
+        fill: project.strokeColor || "#171717",
+      },
+      children: [] as never[],
+      textContent: content,
+    };
+    const component = {
+      id: compId,
+      name: content.slice(0, 24) || "Text",
+      elementIds: [elId],
+      transformOrigin: { x: 0.5, y: 0.5 },
+      role: "text" as const,
+    };
+    set({
+      project: {
+        ...project,
+        parsed: {
+          ...project.parsed,
+          elements: [...project.parsed.elements, textNode],
+          elementMap: {
+            ...project.parsed.elementMap,
+            [elId]: textNode,
+          },
+        },
+        components: [...project.components, component],
+      },
+      ui: {
+        ...ui,
+        selectedComponentIds: [compId],
+        selectedElementIds: [elId],
+        rightTab: "inspector",
+        rightOpen: true,
+      },
+    });
+  },
+
+  updateTextContent: (componentId, patch) => {
+    const { project } = get();
+    const component = project.components.find((c) => c.id === componentId);
+    if (!component || !project.parsed) return;
+    const elementMap = { ...project.parsed.elementMap };
+    const elements = project.parsed.elements.map((el) => {
+      if (!component.elementIds.includes(el.id) || el.tag !== "text") {
+        return el;
+      }
+      const next = {
+        ...el,
+        attributes: { ...el.attributes },
+        textContent:
+          patch.content !== undefined ? patch.content : el.textContent,
+      };
+      if (patch.fontSize !== undefined) {
+        next.attributes["font-size"] = String(patch.fontSize);
+      }
+      if (patch.fill !== undefined) {
+        next.attributes.fill = patch.fill;
+      }
+      elementMap[el.id] = next;
+      return next;
+    });
+    set({
+      project: {
+        ...project,
+        parsed: { ...project.parsed, elements, elementMap },
+        components:
+          patch.content !== undefined
+            ? project.components.map((c) =>
+                c.id === componentId
+                  ? { ...c, name: patch.content!.slice(0, 24) || c.name }
+                  : c,
+              )
+            : project.components,
+      },
+    });
+  },
 
   groupSelected: (name) => {
     const { ui, project } = get();

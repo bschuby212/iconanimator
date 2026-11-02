@@ -93,10 +93,72 @@ function bodyToSvg(body: string, viewBox = "0 0 24 24"): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
 
+function pushIcon(
+  results: IconRecord[],
+  lib: LibraryMeta,
+  col: IconifyJSON,
+  name: string,
+): boolean {
+  const data = getIconData(col, name);
+  if (!data) return false;
+  const rendered = iconToSVG(data, { height: "auto" });
+  results.push({
+    id: `${lib.id}:${name}`,
+    name,
+    library: lib.id,
+    libraryName: lib.name,
+    svg: bodyToSvg(rendered.body, rendered.attributes.viewBox || "0 0 24 24"),
+    keywords: name.split("-"),
+  });
+  return true;
+}
+
+/** Representative icon name used as a library mark in the UI */
+export const LIBRARY_MARK_NAMES: Record<LibraryId | "all", string> = {
+  all: "layout-grid",
+  tabler: "brand-tabler",
+  lucide: "aperture",
+  feather: "feather",
+  heroicons: "sparkles",
+  ph: "circles-four",
+  hugeicons: "icons",
+};
+
+export async function getLibraryMarkSvg(
+  id: LibraryId | "all",
+): Promise<string | null> {
+  if (id === "all") {
+    // Prefer lucide layout-grid; fall back to tabler
+    return (
+      (await getIconSvg("lucide", "layout-grid")) ??
+      (await getIconSvg("tabler", "layout-grid"))
+    );
+  }
+  const preferred = LIBRARY_MARK_NAMES[id];
+  const fromSelf = await getIconSvg(id, preferred);
+  if (fromSelf) return fromSelf;
+  // Fallbacks when a pack lacks its brand mark name
+  const fallbacks: string[] = [
+    preferred,
+    "icons",
+    "apps",
+    "grid-dots",
+    "circles-four",
+    "sparkles",
+    "star",
+  ];
+  for (const name of fallbacks) {
+    const svg = await getIconSvg(id, name);
+    if (svg) return svg;
+  }
+  return getIconSvg("lucide", "circle");
+}
+
 export async function searchIcons(
   query: string,
   libraryFilter: LibraryId | "all" = "all",
   limit = 80,
+  offset = 0,
 ): Promise<IconRecord[]> {
   const q = query.trim().toLowerCase();
   const libs =
@@ -105,6 +167,21 @@ export async function searchIcons(
       : LIBRARIES.filter((l) => l.id === libraryFilter);
 
   const results: IconRecord[] = [];
+  const skip = Math.max(0, offset);
+  let skipped = 0;
+
+  const take = (lib: LibraryMeta, col: IconifyJSON, name: string) => {
+    if (results.length >= limit) return true;
+    if (skipped < skip) {
+      // Still count only names that would render
+      const data = getIconData(col, name);
+      if (!data) return false;
+      skipped += 1;
+      return false;
+    }
+    pushIcon(results, lib, col, name);
+    return results.length >= limit;
+  };
 
   for (const lib of libs) {
     const col = await loadCollection(lib.id);
@@ -133,24 +210,22 @@ export async function searchIcons(
       "camera",
     ];
 
-    // Browse without query: curated starter set first
+    // Browse without query
     if (!q) {
+      // Single library: full alphabetical browse with offset/limit
+      if (libraryFilter !== "all") {
+        const names = Object.keys(col.icons).sort((a, b) =>
+          a.localeCompare(b),
+        );
+        for (const name of names.slice(skip, skip + limit)) {
+          pushIcon(results, lib, col, name);
+        }
+        return results;
+      }
+
+      // All libraries: curated starters first (offset applies across the set)
       for (const name of starters) {
-        const data = getIconData(col, name);
-        if (!data) continue;
-        const rendered = iconToSVG(data, { height: "auto" });
-        results.push({
-          id: `${lib.id}:${name}`,
-          name,
-          library: lib.id,
-          libraryName: lib.name,
-          svg: bodyToSvg(
-            rendered.body,
-            rendered.attributes.viewBox || "0 0 24 24",
-          ),
-          keywords: name.split("-"),
-        });
-        if (results.length >= limit) return results;
+        if (take(lib, col, name)) return results;
       }
       continue;
     }
@@ -181,24 +256,11 @@ export async function searchIcons(
     }
     scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
     for (const { name } of scored) {
-      const data = getIconData(col, name);
-      if (!data) continue;
-      const rendered = iconToSVG(data, { height: "auto" });
-      const vb = rendered.attributes.viewBox || "0 0 24 24";
-      const svg = bodyToSvg(rendered.body, vb);
-      results.push({
-        id: `${lib.id}:${name}`,
-        name,
-        library: lib.id,
-        libraryName: lib.name,
-        svg,
-        keywords: name.split("-"),
-      });
-      if (results.length >= limit) return results;
+      if (take(lib, col, name)) return results;
     }
   }
 
-  return results.slice(0, limit);
+  return results;
 }
 
 export async function getIconSvg(

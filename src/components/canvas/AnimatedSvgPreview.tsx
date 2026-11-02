@@ -28,6 +28,12 @@ function nodeProps(node: SvgElementNode) {
       "fill-rule": "fillRule",
       "clip-rule": "clipRule",
       "vector-effect": "vectorEffect",
+      "font-size": "fontSize",
+      "font-family": "fontFamily",
+      "font-weight": "fontWeight",
+      "text-anchor": "textAnchor",
+      "dominant-baseline": "dominantBaseline",
+      "letter-spacing": "letterSpacing",
     };
     attrs[map[key] ?? key] = value;
   }
@@ -84,6 +90,25 @@ function AnimatedNode({
   if (node.tag === "line") return <line {...common} />;
   if (node.tag === "polyline") return <polyline {...common} />;
   if (node.tag === "polygon") return <polygon {...common} />;
+  if (node.tag === "text") {
+    return (
+      <text {...common}>
+        {node.children.length
+          ? node.children.map((child) => (
+              <AnimatedNode
+                key={child.id}
+                node={child}
+                transforms={transforms}
+                selectedIds={selectedIds}
+              />
+            ))
+          : node.textContent}
+      </text>
+    );
+  }
+  if (node.tag === "tspan") {
+    return <tspan {...common}>{node.textContent}</tspan>;
+  }
   return null;
 }
 

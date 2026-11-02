@@ -57,6 +57,8 @@ export interface SvgElementNode {
   originalId?: string;
   /** Parent group id if nested */
   parentId?: string;
+  /** Text content for <text> / <tspan> nodes */
+  textContent?: string;
 }
 
 export interface SvgComponent {
@@ -65,6 +67,7 @@ export interface SvgComponent {
   elementIds: string[];
   transformOrigin: TransformOrigin;
   locked?: boolean;
+  hidden?: boolean;
   role?: ComponentRole;
 }
 
@@ -86,6 +89,7 @@ export type ComponentRole =
   | "tray"
   | "glass"
   | "handle-bar"
+  | "text"
   | "other";
 
 export interface ParsedSvg {

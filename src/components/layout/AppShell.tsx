@@ -171,7 +171,7 @@ export function AppShell() {
                 <MoreHorizontal className="h-4 w-4" />
               </summary>
               <div className="absolute right-0 z-30 mt-1 w-44 rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg">
-                <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+                <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium text-[var(--text-secondary)]">
                   File
                 </p>
                 <button

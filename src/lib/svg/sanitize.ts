@@ -8,6 +8,8 @@ const ALLOWED_TAGS = new Set([
   "line",
   "polyline",
   "polygon",
+  "text",
+  "tspan",
   "defs",
   "clipPath",
   "mask",
@@ -39,6 +41,8 @@ const ALLOWED_ATTRS = new Set([
   "ry",
   "x",
   "y",
+  "dx",
+  "dy",
   "x1",
   "y1",
   "x2",
@@ -56,6 +60,12 @@ const ALLOWED_ATTRS = new Set([
   "fill-rule",
   "clip-rule",
   "vector-effect",
+  "font-size",
+  "font-family",
+  "font-weight",
+  "text-anchor",
+  "dominant-baseline",
+  "letter-spacing",
 ]);
 
 export function sanitizeSvg(input: string): string {
