@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import {
   ArrowLeftRight,
+  Aperture,
   Blend,
   CircleDashed,
   CornerDownRight,
+  Droplets,
   EyeOff,
   Layers,
   Move,
@@ -14,8 +16,11 @@ import {
   Radius,
   RotateCw,
   Scaling,
+  Sparkles,
   Square,
   Squircle,
+  Wind,
+  Waves,
 } from "lucide-react";
 import { useProjectStore } from "@/store/project-store";
 import { cn } from "@/lib/utils/cn";
@@ -135,13 +140,48 @@ const CUSTOM_SECTIONS: {
   },
 ];
 
-const EFFECTS_ITEMS: { id: MotionToolId; label: string; hint: string }[] = [
-  { id: "fade-in", label: "Soft fade", hint: "Ease opacity in" },
-  { id: "fade-out", label: "Dissolve", hint: "Ease opacity out" },
-  { id: "pop", label: "Bloom", hint: "Scale and fade in" },
-  { id: "float", label: "Drift", hint: "Gentle float" },
-  { id: "wiggle", label: "Warp", hint: "Subtle twist" },
-  { id: "pulse", label: "Pulse glow", hint: "Scale pulse" },
+const EFFECTS_ITEMS: {
+  id: MotionToolId;
+  label: string;
+  hint: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    id: "fade-in",
+    label: "Soft fade",
+    hint: "Ease opacity in",
+    icon: <Droplets className="h-4 w-4" />,
+  },
+  {
+    id: "fade-out",
+    label: "Dissolve",
+    hint: "Ease opacity out",
+    icon: <CircleDashed className="h-4 w-4" />,
+  },
+  {
+    id: "pop",
+    label: "Bloom",
+    hint: "Scale and fade in",
+    icon: <Sparkles className="h-4 w-4" />,
+  },
+  {
+    id: "float",
+    label: "Drift",
+    hint: "Gentle float",
+    icon: <Wind className="h-4 w-4" />,
+  },
+  {
+    id: "wiggle",
+    label: "Warp",
+    hint: "Subtle twist",
+    icon: <Waves className="h-4 w-4" />,
+  },
+  {
+    id: "pulse",
+    label: "Pulse glow",
+    hint: "Scale pulse",
+    icon: <Aperture className="h-4 w-4" />,
+  },
 ];
 
 function textPreviewSvg(content: string, fill = "#171717") {
@@ -253,9 +293,9 @@ export function AnimatePanel() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-white">
-      <div className="shrink-0 border-b border-[var(--border)] px-3 py-3">
+      <div className="shrink-0 px-3 pt-2">
         <div
-          className="grid grid-cols-3 gap-1 rounded-xl bg-[#f0f0f2] p-1"
+          className="flex gap-5 border-b border-black/[0.08]"
           role="tablist"
           aria-label="Animate modes"
         >
@@ -276,10 +316,10 @@ export function AnimatePanel() {
                 onClick={() => setSubTab(t.id)}
                 data-testid={`animate-subtab-${t.id}`}
                 className={cn(
-                  "h-8 rounded-lg text-[12px] font-semibold tracking-[-0.01em] transition-colors",
+                  "-mb-px border-b-2 pb-2.5 text-[13px] font-medium tracking-[-0.01em] transition-colors",
                   active
-                    ? "bg-[#0f9f8a] text-white shadow-sm"
-                    : "bg-transparent text-black/50 hover:text-black/75",
+                    ? "border-[#0f9f8a] text-[#0f9f8a]"
+                    : "border-transparent text-black/40 hover:text-black/65",
                 )}
               >
                 {t.label}
@@ -288,12 +328,12 @@ export function AnimatePanel() {
           })}
         </div>
         {!primary && project.components.length > 0 && (
-          <p className="mt-2 text-[11px] text-[var(--text-secondary)]">
+          <p className="pb-2.5 pt-1 text-[11px] text-[var(--text-secondary)]">
             Select a layer, then pick a motion.
           </p>
         )}
         {!project.components.length && (
-          <p className="mt-2 text-[11px] text-[var(--text-secondary)]">
+          <p className="pb-2.5 pt-1 text-[11px] text-[var(--text-secondary)]">
             Add an icon or text layer to animate.
           </p>
         )}
@@ -454,22 +494,27 @@ export function AnimatePanel() {
       )}
 
       {subTab === "effects" && (
-        <div className="space-y-1 p-2">
-          <p className="px-2 py-1.5 text-[13px] font-semibold text-black">
+        <div className="px-1 py-1">
+          <p className="px-3 pb-1 pt-3 text-[13px] font-semibold text-black">
             Effects
           </p>
-          <ul>
+          <ul className="pb-1">
             {EFFECTS_ITEMS.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
                   disabled={!project.components.length}
                   onClick={() => onCustom(item.id)}
-                  className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-black/[0.03] disabled:opacity-40"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/[0.03] disabled:opacity-40"
                 >
-                  <span className="text-[13px] text-black">{item.label}</span>
-                  <span className="text-[11px] text-[var(--text-secondary)]">
-                    {item.hint}
+                  <span className="text-[#0f9f8a]">{item.icon}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] text-black">
+                      {item.label}
+                    </span>
+                    <span className="block text-[11px] text-[var(--text-secondary)]">
+                      {item.hint}
+                    </span>
                   </span>
                 </button>
               </li>
