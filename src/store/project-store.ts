@@ -39,7 +39,7 @@ import type { ElementTrack } from "@/lib/animation/types";
 
 export type CanvasBg = "canvas" | "white" | "transparent";
 
-export type RightTab = "chat" | "inspector" | "history";
+export type RightTab = "chat" | "inspector" | "layers";
 
 export interface UiState {
   leftOpen: boolean;
@@ -54,6 +54,7 @@ export interface UiState {
   zoom: number;
   canvasBg: CanvasBg;
   exportOpen: boolean;
+  historyOpen: boolean;
   readyToGenerate: boolean;
   generating: boolean;
 }
@@ -77,6 +78,7 @@ interface Store {
   setZoom: (z: number) => void;
   setCanvasBg: (bg: CanvasBg) => void;
   setExportOpen: (v: boolean) => void;
+  setHistoryOpen: (v: boolean) => void;
   setCurrentTime: (t: number) => void;
   setPlaying: (p: boolean) => void;
   setIconSize: (size: number) => void;
@@ -215,6 +217,7 @@ const defaultUi: UiState = {
   zoom: 1,
   canvasBg: "canvas",
   exportOpen: false,
+  historyOpen: false,
   readyToGenerate: false,
   generating: false,
 };
@@ -232,6 +235,7 @@ export const useProjectStore = create<Store>((set, get) => ({
     set((s) => ({ ui: { ...s.ui, zoom: Math.min(3, Math.max(0.5, Number(z.toFixed(2)))) } })),
   setCanvasBg: (bg) => set((s) => ({ ui: { ...s.ui, canvasBg: bg } })),
   setExportOpen: (v) => set((s) => ({ ui: { ...s.ui, exportOpen: v } })),
+  setHistoryOpen: (v) => set((s) => ({ ui: { ...s.ui, historyOpen: v } })),
   setCurrentTime: (t) => set((s) => ({ ui: { ...s.ui, currentTime: t } })),
   setPlaying: (p) => set((s) => ({ ui: { ...s.ui, playing: p } })),
   setIconSize: (size) =>

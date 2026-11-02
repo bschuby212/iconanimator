@@ -2,14 +2,14 @@
 
 import { AiChatPanel } from "@/components/ai/AiChatPanel";
 import { Inspector } from "@/components/inspector/Inspector";
-import { HistoryPanel } from "@/components/layout/HistoryPanel";
+import { LayersPanel } from "@/components/layout/LayersPanel";
 import { useProjectStore, type RightTab } from "@/store/project-store";
 import { cn } from "@/lib/utils/cn";
 
 const TABS: { id: RightTab; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "inspector", label: "Inspect" },
-  { id: "history", label: "History" },
+  { id: "layers", label: "Layers" },
 ];
 
 export function RightSidebar() {
@@ -19,7 +19,6 @@ export function RightSidebar() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="shrink-0 border-b border-[var(--border)] px-3 py-2.5">
-        {/* iOS-style segmented control */}
         <div
           className="flex rounded-full bg-[#e5e5ea] p-[2px]"
           role="tablist"
@@ -51,7 +50,7 @@ export function RightSidebar() {
       <div className="min-h-0 flex-1 overflow-hidden">
         {rightTab === "chat" && <AiChatPanel />}
         {rightTab === "inspector" && <Inspector />}
-        {rightTab === "history" && <HistoryPanel />}
+        {rightTab === "layers" && <LayersPanel />}
       </div>
     </div>
   );

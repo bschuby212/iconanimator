@@ -11,7 +11,6 @@ import {
 } from "@/lib/animation/motions";
 import type { InteractionType } from "@/lib/animation/types";
 import { MotionDemo } from "@/components/inspector/MotionDemo";
-import { buildLayerPreviewSvg } from "@/lib/svg/layer-preview";
 
 const GROUPS = ["Transform", "Opacity", "Appear", "Motion"] as const;
 
@@ -167,38 +166,6 @@ export function Inspector() {
             </button>
           </div>
         )}
-      </section>
-
-      <section className="space-y-1 border-b border-[var(--border)] bg-white p-3">
-        <p className={cn(sectionLabel, "mb-1.5")}>Layers</p>
-        {project.components.length === 0 && (
-          <p className="text-xs text-[var(--text-secondary)]">No components</p>
-        )}
-        {project.components.map((c) => {
-          const thumb = buildLayerPreviewSvg(project.parsed, c, 18);
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => selectComponents([c.id])}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
-                ui.selectedComponentIds.includes(c.id)
-                  ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
-                  : "text-[var(--text)] hover:bg-black/[0.03]",
-              )}
-            >
-              <span
-                className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-white text-[var(--text)] [&_svg]:h-[14px] [&_svg]:w-[14px]"
-                dangerouslySetInnerHTML={{ __html: thumb }}
-              />
-              <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
-              <span className="shrink-0 text-[10px] opacity-60 capitalize">
-                {c.role}
-              </span>
-            </button>
-          );
-        })}
       </section>
 
       <section className="border-b border-[var(--border)] bg-white p-3">

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Check,
   Download,
+  History,
   MoreHorizontal,
   PanelLeft,
   Pencil,
@@ -16,6 +17,7 @@ import { AnimationCanvas } from "@/components/canvas/AnimationCanvas";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { Timeline } from "@/components/layout/Timeline";
 import { ExportDialog } from "@/components/export/ExportDialog";
+import { HistoryModal } from "@/components/layout/HistoryModal";
 import { Button } from "@/components/ui/button";
 import { useProjectStore } from "@/store/project-store";
 import { listProjects, loadProject } from "@/lib/persistence/db";
@@ -28,6 +30,7 @@ export function AppShell() {
   const setRightOpen = useProjectStore((s) => s.setRightOpen);
   const setTimelineHeight = useProjectStore((s) => s.setTimelineHeight);
   const setExportOpen = useProjectStore((s) => s.setExportOpen);
+  const setHistoryOpen = useProjectStore((s) => s.setHistoryOpen);
   const setProjectName = useProjectStore((s) => s.setProjectName);
   const persist = useProjectStore((s) => s.persist);
   const loadProjectState = useProjectStore((s) => s.loadProjectState);
@@ -252,6 +255,16 @@ export function AppShell() {
             <Download className="h-3.5 w-3.5" />
             Export
           </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-1"
+            onClick={() => setHistoryOpen(true)}
+            data-testid="history-cta"
+          >
+            <History className="h-3.5 w-3.5" />
+            History
+          </Button>
         </div>
       </header>
 
@@ -305,6 +318,7 @@ export function AppShell() {
       </div>
 
       <ExportDialog />
+      <HistoryModal />
     </div>
   );
 }
