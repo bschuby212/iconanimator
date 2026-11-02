@@ -24,6 +24,8 @@ export function AnimationCanvas() {
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const setZoom = useProjectStore((s) => s.setZoom);
   const selectComponents = useProjectStore((s) => s.selectComponents);
+  const selectElements = useProjectStore((s) => s.selectElements);
+  const setRightTab = useProjectStore((s) => s.setRightTab);
   const raf = useRef<number>(0);
   const last = useRef<number>(0);
   const timeRef = useRef(ui.currentTime);
@@ -85,10 +87,11 @@ export function AnimationCanvas() {
   }, [project.animation, ui.currentTime, origins]);
 
   const selectedElementIds = useMemo(() => {
+    if (ui.selectedElementIds.length) return ui.selectedElementIds;
     return project.components
       .filter((c) => ui.selectedComponentIds.includes(c.id))
       .flatMap((c) => c.elementIds);
-  }, [project.components, ui.selectedComponentIds]);
+  }, [project.components, ui.selectedComponentIds, ui.selectedElementIds]);
 
   const frameBg =
     !frame.background || frame.background === "transparent"
@@ -188,12 +191,17 @@ export function AnimationCanvas() {
                 onSelectElement={(id) => {
                   if (!id) {
                     selectComponents([]);
+                    selectElements([]);
                     return;
                   }
+                  // Direct canvas path/group click → select that SVG element
+                  selectElements([id]);
                   const cmp = project.components.find((c) =>
                     c.elementIds.includes(id),
                   );
                   if (cmp) selectComponents([cmp.id]);
+                  else selectComponents([]);
+                  setRightTab("layers");
                 }}
               />
             </div>

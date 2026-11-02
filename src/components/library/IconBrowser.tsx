@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search, Type, Upload } from "lucide-react";
 import {
   LIBRARIES,
@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils/cn";
 import { addRecent } from "@/lib/persistence/db";
 
 const PAGE = 240;
-const VISIBLE_LIBS = LIBRARIES.filter((l) => l.id !== "hugeicons");
 
 export function IconBrowser() {
   const selectIcon = useProjectStore((s) => s.selectIcon);
@@ -27,11 +26,13 @@ export function IconBrowser() {
   );
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [library, setLibrary] = useState<LibraryId | "all">("tabler");
+  const [library, setLibrary] = useState<LibraryId | "all">("ph");
   const [icons, setIcons] = useState<IconRecord[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeFamily, setActiveFamily] = useState<IconRecord | null>(null);
+  const [variantId, setVariantId] = useState<string>("regular");
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,6 +47,7 @@ export function IconBrowser() {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setActiveFamily(null);
     const params = new URLSearchParams({
       q: deferredQuery,
       library,
@@ -93,26 +95,58 @@ export function IconBrowser() {
       .finally(() => setLoading(false));
   };
 
-  const onSelect = async (icon: IconRecord) => {
+  const previewSvg = useMemo(() => {
+    if (!activeFamily) return null;
+    const v =
+      activeFamily.variants.find((x) => x.id === variantId) ??
+      activeFamily.variants[0];
+    return v?.svg ?? activeFamily.svg;
+  }, [activeFamily, variantId]);
+
+  const onSelectFamily = (icon: IconRecord) => {
+    setActiveFamily(icon);
+    setVariantId(icon.defaultVariant);
+    const v =
+      icon.variants.find((x) => x.id === icon.defaultVariant) ??
+      icon.variants[0];
+    void commitSelection(icon, v?.id ?? icon.defaultVariant, v?.svg ?? icon.svg);
+  };
+
+  const commitSelection = async (
+    icon: IconRecord,
+    nextVariant: string,
+    svg: string,
+  ) => {
     selectIcon({
-      id: icon.id,
+      id: `${icon.id}:${nextVariant}`,
       name: icon.name,
-      library: icon.libraryName,
-      svg: icon.svg,
+      library: icon.library,
+      svg,
       keywords: icon.keywords,
     });
     await addRecent({
-      iconId: icon.id,
-      svg: icon.svg,
+      iconId: `${icon.id}:${nextVariant}`,
+      svg,
       name: icon.name,
       library: icon.library,
     });
   };
 
+  const onVariantChange = (next: string) => {
+    if (!activeFamily) return;
+    setVariantId(next);
+    const v = activeFamily.variants.find((x) => x.id === next);
+    if (!v) return;
+    void commitSelection(activeFamily, next, v.svg);
+  };
+
   const activeLabel =
     library === "all"
       ? "All libraries"
-      : VISIBLE_LIBS.find((l) => l.id === library)?.name ?? "Library";
+      : LIBRARIES.find((l) => l.id === library)?.name ?? "Library";
+
+  const showVariantBar =
+    !!activeFamily && activeFamily.variants.length > 1;
 
   return (
     <div className="flex h-full flex-col bg-[var(--surface)]">
@@ -151,7 +185,7 @@ export function IconBrowser() {
             {menuOpen && (
               <ul
                 role="listbox"
-                className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg"
+                className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-auto rounded-lg border border-[var(--border)] bg-white py-1 shadow-lg"
               >
                 <LibraryOption
                   label="All libraries"
@@ -162,7 +196,7 @@ export function IconBrowser() {
                     setMenuOpen(false);
                   }}
                 />
-                {VISIBLE_LIBS.map((l) => (
+                {LIBRARIES.map((l) => (
                   <LibraryOption
                     key={l.id}
                     label={l.name}
@@ -214,28 +248,68 @@ export function IconBrowser() {
             </button>
           )}
         </div>
+        {showVariantBar && (
+          <div className="flex flex-wrap gap-1" data-testid="icon-variant-bar">
+            {activeFamily!.variants.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => onVariantChange(v.id)}
+                className={cn(
+                  "h-7 rounded-md px-2 text-[11px] font-medium transition-colors",
+                  variantId === v.id
+                    ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
+                    : "bg-black/[0.04] text-[var(--text-secondary)] hover:text-[var(--text)]",
+                )}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <div className="grid grid-cols-4 gap-0.5">
-          {icons.map((icon) => (
-            <button
-              key={icon.id}
-              title={icon.name}
-              onClick={() => void onSelect(icon)}
-              className={cn(
-                "flex aspect-square items-center justify-center rounded-lg transition-colors",
-                selectedId === icon.id
-                  ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
-                  : "text-[var(--text)] hover:bg-black/[0.04]",
-              )}
-            >
-              <span
-                className="flex h-[20px] w-[20px] items-center justify-center text-current [&_svg]:h-full [&_svg]:w-full [&_svg]:max-h-full [&_svg]:max-w-full"
-                dangerouslySetInnerHTML={{ __html: icon.svg }}
-              />
-            </button>
-          ))}
+          {icons.map((icon) => {
+            const selected =
+              selectedId === icon.id ||
+              selectedId?.startsWith(`${icon.id}:`) ||
+              activeFamily?.id === icon.id;
+            return (
+              <button
+                key={icon.id}
+                title={
+                  library === "all"
+                    ? `${icon.name} · ${icon.libraryName}`
+                    : icon.name
+                }
+                onClick={() => onSelectFamily(icon)}
+                data-testid={`icon-card-${icon.id}`}
+                className={cn(
+                  "relative flex aspect-square flex-col items-center justify-center rounded-lg transition-colors",
+                  selected
+                    ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
+                    : "text-[var(--text)] hover:bg-black/[0.04]",
+                )}
+              >
+                <span
+                  className="flex h-[20px] w-[20px] items-center justify-center text-current [&_svg]:h-full [&_svg]:w-full [&_svg]:max-h-full [&_svg]:max-w-full"
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      activeFamily?.id === icon.id && previewSvg
+                        ? previewSvg
+                        : icon.svg,
+                  }}
+                />
+                {library === "all" && (
+                  <span className="mt-0.5 max-w-full truncate px-0.5 text-[8px] leading-none text-[var(--text-secondary)]">
+                    {icon.library}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
         {!icons.length && !loading && (
           <p className="p-6 text-center text-xs text-[var(--text-secondary)]">

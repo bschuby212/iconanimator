@@ -21,6 +21,13 @@ const LIBRARY_PATTERNS: { id: LibraryId; re: RegExp }[] = [
   { id: "feather", re: /\b(?:feather(?:\s+icons?)?)\b/i },
   { id: "heroicons", re: /\b(?:heroicons?|hero\s+icons?)\b/i },
   { id: "ph", re: /\b(?:phosphor(?:\s+icons?)?|\bph\b)\b/i },
+  { id: "ri", re: /\b(?:remix(?:\s+icons?)?)\b/i },
+  { id: "iconoir", re: /\b(?:iconoir)\b/i },
+  { id: "bi", re: /\b(?:bootstrap(?:\s+icons?)?)\b/i },
+  {
+    id: "material-symbols",
+    re: /\b(?:material(?:\s+symbols?)?|material\s+icons?)\b/i,
+  },
 ];
 
 const MOTION_RE =
@@ -111,10 +118,15 @@ function detectLibrary(prompt: string): LibraryId | "all" {
     if (re.test(prompt)) return id;
   }
   // prefix form: tabler:settings
-  const m = prompt.match(/\b(tabler|lucide|feather|heroicons|ph|phosphor)\s*:\s*[\w-]+/i);
+  const m = prompt.match(
+    /\b(tabler|lucide|feather|heroicons|ph|phosphor|ri|remix|iconoir|bi|bootstrap|material-symbols|material)\s*:\s*[\w-]+/i,
+  );
   if (m) {
     const key = m[1].toLowerCase();
     if (key === "phosphor") return "ph";
+    if (key === "remix") return "ri";
+    if (key === "bootstrap") return "bi";
+    if (key === "material") return "material-symbols";
     return key as LibraryId;
   }
   return "all";
@@ -135,11 +147,13 @@ function extractIconQuery(prompt: string): string | null {
 
   // tabler:settings or settings@tabler
   const prefixed = p.match(
-    /\b(?:tabler|lucide|feather|heroicons|ph|phosphor)\s*:\s*([\w-]+)/i,
+    /\b(?:tabler|lucide|feather|heroicons|ph|phosphor|ri|remix|iconoir|bi|bootstrap|material-symbols|material)\s*:\s*([\w-]+)/i,
   );
   if (prefixed?.[1]) return normalizeIconName(prefixed[1]);
 
-  const atForm = p.match(/\b([\w-]+)\s*@\s*(?:tabler|lucide|feather|heroicons|ph|phosphor)\b/i);
+  const atForm = p.match(
+    /\b([\w-]+)\s*@\s*(?:tabler|lucide|feather|heroicons|ph|phosphor|ri|remix|iconoir|bi|bootstrap|material-symbols|material)\b/i,
+  );
   if (atForm?.[1]) return normalizeIconName(atForm[1]);
 
   // "settings icon" / "the settings icon"
