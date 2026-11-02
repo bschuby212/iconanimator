@@ -89,8 +89,13 @@ export interface IconRecord {
   keywords: string[];
 }
 
+/**
+ * Wrap Iconify body without forcing stroke/fill on the root.
+ * Fill-based packs (Phosphor, Heroicons solid) and large viewBoxes
+ * break when we stamp stroke-width="2" on the outer svg.
+ */
 function bodyToSvg(body: string, viewBox = "0 0 24 24"): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${body}</svg>`;
 }
 
 function pushIcon(
@@ -113,46 +118,7 @@ function pushIcon(
   return true;
 }
 
-/** Representative icon name used as a library mark in the UI */
-export const LIBRARY_MARK_NAMES: Record<LibraryId | "all", string> = {
-  all: "layout-grid",
-  tabler: "brand-tabler",
-  lucide: "aperture",
-  feather: "feather",
-  heroicons: "sparkles",
-  ph: "circles-four",
-  hugeicons: "icons",
-};
-
-export async function getLibraryMarkSvg(
-  id: LibraryId | "all",
-): Promise<string | null> {
-  if (id === "all") {
-    // Prefer lucide layout-grid; fall back to tabler
-    return (
-      (await getIconSvg("lucide", "layout-grid")) ??
-      (await getIconSvg("tabler", "layout-grid"))
-    );
-  }
-  const preferred = LIBRARY_MARK_NAMES[id];
-  const fromSelf = await getIconSvg(id, preferred);
-  if (fromSelf) return fromSelf;
-  // Fallbacks when a pack lacks its brand mark name
-  const fallbacks: string[] = [
-    preferred,
-    "icons",
-    "apps",
-    "grid-dots",
-    "circles-four",
-    "sparkles",
-    "star",
-  ];
-  for (const name of fallbacks) {
-    const svg = await getIconSvg(id, name);
-    if (svg) return svg;
-  }
-  return getIconSvg("lucide", "circle");
-}
+export { getLibraryLogo as getLibraryMarkSvg } from "./library-logos";
 
 export async function searchIcons(
   query: string,

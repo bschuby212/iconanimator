@@ -95,6 +95,7 @@ interface Store {
     componentId: string,
     patch: { content?: string; fontSize?: number; fill?: string },
   ) => void;
+  clearIconKeepText: () => void;
   groupSelected: (name: string) => void;
   ungroup: (componentId: string) => void;
   sendChat: (message: string) => void;
@@ -248,7 +249,34 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   selectIcon: (icon) => {
     const parsed = parseSvg(icon.svg);
-    const components = recognizeComponents(parsed, icon.name);
+    let components = recognizeComponents(parsed, icon.name);
+    const { project } = get();
+
+    // Preserve existing text layers when swapping/adding an icon (icon + text)
+    const existingText = (project.components ?? []).filter(
+      (c) => c.role === "text",
+    );
+    if (existingText.length && project.parsed) {
+      const [, , vbW = 24, vbH = 24] = parsed.viewBox.split(/[\s,]+/).map(Number);
+      for (const tc of existingText) {
+        for (const eid of tc.elementIds) {
+          const node = project.parsed.elementMap[eid];
+          if (!node || node.tag !== "text") continue;
+          const nextNode = {
+            ...node,
+            attributes: {
+              ...node.attributes,
+              x: String(vbW / 2),
+              y: String(vbH + 10),
+            },
+          };
+          parsed.elements.push(nextNode);
+          parsed.elementMap[eid] = nextNode;
+        }
+        components = [...components, tc];
+      }
+    }
+
     const draftId = `gen_${nanoid(8)}`;
     const now = Date.now();
     const draft: CreationHistoryEntry = {
@@ -256,7 +284,7 @@ export const useProjectStore = create<Store>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       status: "draft",
-      name: "",
+      name: project.name || "",
       iconName: icon.name,
       prompt: "",
       icon,
@@ -285,7 +313,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         currentTime: 0,
         playing: false,
         readyToGenerate: false,
-        rightTab: "chat",
+        rightTab: existingText.length ? "inspector" : "chat",
         rightOpen: true,
       },
     }));
@@ -333,19 +361,37 @@ export const useProjectStore = create<Store>((set, get) => ({
 
   addTextLayer: (content = "Label") => {
     const { project, ui } = get();
-    if (!project.parsed) return;
-    const [, , vbW = 24, vbH = 24] = project.parsed.viewBox
-      .split(/[\s,]+/)
-      .map(Number);
     const elId = `el_${nanoid(8)}`;
     const compId = `cmp_${nanoid(8)}`;
+
+    // Text-only: bootstrap a blank canvas when no icon/parsed SVG yet
+    const baseParsed =
+      project.parsed ??
+      ({
+        viewBox: "0 0 24 24",
+        width: 24,
+        height: 24,
+        rootAttributes: {
+          viewBox: "0 0 24 24",
+          xmlns: "http://www.w3.org/2000/svg",
+        },
+        elements: [],
+        elementMap: {},
+        originalSvg:
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"></svg>',
+      } as const);
+
+    const [, , vbW = 24, vbH = 24] = baseParsed.viewBox
+      .split(/[\s,]+/)
+      .map(Number);
+    const fontSize = project.parsed ? 4 : 6;
     const textNode = {
       id: elId,
       tag: "text",
       attributes: {
         x: String(vbW / 2),
-        y: String(vbH + 10),
-        "font-size": "4",
+        y: String(project.parsed ? vbH + 10 : vbH / 2 + fontSize / 3),
+        "font-size": String(fontSize),
         "font-family": "ui-sans-serif, system-ui, sans-serif",
         "text-anchor": "middle",
         fill: project.strokeColor || "#171717",
@@ -360,14 +406,16 @@ export const useProjectStore = create<Store>((set, get) => ({
       transformOrigin: { x: 0.5, y: 0.5 },
       role: "text" as const,
     };
+    const draftId = project.activeCreationId ?? `gen_${nanoid(8)}`;
     set({
       project: {
         ...project,
+        activeCreationId: draftId,
         parsed: {
-          ...project.parsed,
-          elements: [...project.parsed.elements, textNode],
+          ...baseParsed,
+          elements: [...baseParsed.elements, textNode],
           elementMap: {
-            ...project.parsed.elementMap,
+            ...baseParsed.elementMap,
             [elId]: textNode,
           },
         },
@@ -379,6 +427,66 @@ export const useProjectStore = create<Store>((set, get) => ({
         selectedElementIds: [elId],
         rightTab: "inspector",
         rightOpen: true,
+      },
+    });
+  },
+
+  clearIconKeepText: () => {
+    const { project, ui } = get();
+    const textComponents = project.components.filter((c) => c.role === "text");
+    if (!textComponents.length || !project.parsed) return;
+
+    const elementMap: typeof project.parsed.elementMap = {};
+    const elements = [];
+    for (const c of textComponents) {
+      for (const eid of c.elementIds) {
+        const node = project.parsed.elementMap[eid];
+        if (!node) continue;
+        const next = {
+          ...node,
+          attributes: {
+            ...node.attributes,
+            x: "12",
+            y: "13",
+            "font-size": node.attributes["font-size"] || "6",
+          },
+        };
+        elements.push(next);
+        elementMap[eid] = next;
+      }
+    }
+
+    set({
+      project: {
+        ...project,
+        icon: null,
+        animation: null,
+        plan: null,
+        conversation: [],
+        history: [],
+        historyIndex: -1,
+        parsed: {
+          viewBox: "0 0 24 24",
+          width: 24,
+          height: 24,
+          rootAttributes: {
+            viewBox: "0 0 24 24",
+            xmlns: "http://www.w3.org/2000/svg",
+          },
+          elements,
+          elementMap,
+          originalSvg:
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"></svg>',
+        },
+        components: textComponents,
+      },
+      ui: {
+        ...ui,
+        currentTime: 0,
+        playing: false,
+        readyToGenerate: false,
+        selectedComponentIds: textComponents[0] ? [textComponents[0].id] : [],
+        rightTab: "inspector",
       },
     });
   },

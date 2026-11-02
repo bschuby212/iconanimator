@@ -3,11 +3,11 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { ChevronDown, Search, Type, Upload } from "lucide-react";
 import {
-  getLibraryMarkSvg,
   LIBRARIES,
   type IconRecord,
   type LibraryId,
 } from "@/lib/icons/libraries";
+import { getLibraryLogo } from "@/lib/icons/library-logos";
 import { useProjectStore } from "@/store/project-store";
 import { cn } from "@/lib/utils/cn";
 import { addRecent } from "@/lib/persistence/db";
@@ -19,8 +19,12 @@ export function IconBrowser() {
   const selectIcon = useProjectStore((s) => s.selectIcon);
   const uploadSvg = useProjectStore((s) => s.uploadSvg);
   const addTextLayer = useProjectStore((s) => s.addTextLayer);
+  const clearIconKeepText = useProjectStore((s) => s.clearIconKeepText);
   const selectedId = useProjectStore((s) => s.project.icon?.id);
   const hasIcon = useProjectStore((s) => !!s.project.icon);
+  const hasText = useProjectStore((s) =>
+    s.project.components.some((c) => c.role === "text"),
+  );
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [library, setLibrary] = useState<LibraryId | "all">("tabler");
@@ -28,31 +32,7 @@ export function IconBrowser() {
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [marks, setMarks] = useState<Partial<Record<LibraryId | "all", string>>>(
-    {},
-  );
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let active = true;
-    const ids: (LibraryId | "all")[] = ["all", ...VISIBLE_LIBS.map((l) => l.id)];
-    void Promise.all(
-      ids.map(async (id) => {
-        const svg = await getLibraryMarkSvg(id);
-        return [id, svg] as const;
-      }),
-    ).then((entries) => {
-      if (!active) return;
-      const next: Partial<Record<LibraryId | "all", string>> = {};
-      for (const [id, svg] of entries) {
-        if (svg) next[id] = svg;
-      }
-      setMarks(next);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -159,7 +139,7 @@ export function IconBrowser() {
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
             >
-              <LibraryMark svg={marks[library]} />
+              <LibraryMark svg={getLibraryLogo(library)} />
               <span className="min-w-0 flex-1 truncate">{activeLabel}</span>
               <ChevronDown
                 className={cn(
@@ -175,7 +155,7 @@ export function IconBrowser() {
               >
                 <LibraryOption
                   label="All libraries"
-                  svg={marks.all}
+                  svg={getLibraryLogo("all")}
                   active={library === "all"}
                   onSelect={() => {
                     setLibrary("all");
@@ -186,7 +166,7 @@ export function IconBrowser() {
                   <LibraryOption
                     key={l.id}
                     label={l.name}
-                    svg={marks[l.id]}
+                    svg={getLibraryLogo(l.id)}
                     active={library === l.id}
                     onSelect={() => {
                       setLibrary(l.id);
@@ -211,18 +191,38 @@ export function IconBrowser() {
               }}
             />
             <Upload className="h-3.5 w-3.5" />
-            SVG
+            Upload
           </label>
         </div>
-        <button
-          type="button"
-          disabled={!hasIcon}
-          onClick={() => addTextLayer("Label")}
-          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-white text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--bg)] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Type className="h-3.5 w-3.5" />
-          Add text
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => addTextLayer("Label")}
+            className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-white text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--bg)]"
+          >
+            <Type className="h-3.5 w-3.5" />
+            {hasText ? "Add text" : "Text only"}
+          </button>
+          {hasIcon && hasText && (
+            <button
+              type="button"
+              onClick={() => clearIconKeepText()}
+              className="h-8 shrink-0 rounded-lg border border-[var(--border)] px-2 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg)] hover:text-[var(--text)]"
+              title="Remove icon, keep text"
+            >
+              Icon off
+            </button>
+          )}
+        </div>
+        <p className="text-[10px] text-[var(--text-secondary)]">
+          {hasIcon && hasText
+            ? "Composition: icon + text"
+            : hasIcon
+              ? "Composition: icon only — add text anytime"
+              : hasText
+                ? "Composition: text only — pick an icon to combine"
+                : "Start with an icon, text, or both"}
+        </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -240,7 +240,7 @@ export function IconBrowser() {
               )}
             >
               <span
-                className="h-[18px] w-[18px] [&_svg]:h-full [&_svg]:w-full"
+                className="flex h-[20px] w-[20px] items-center justify-center text-current [&_svg]:h-full [&_svg]:w-full [&_svg]:max-h-full [&_svg]:max-w-full"
                 dangerouslySetInnerHTML={{ __html: icon.svg }}
               />
             </button>

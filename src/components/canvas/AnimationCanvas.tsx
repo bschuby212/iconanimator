@@ -166,9 +166,11 @@ export function AnimationCanvas() {
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 pt-14 pb-4">
         {!project.parsed ? (
           <div className="max-w-xs text-center">
-            <p className="text-sm font-medium text-[var(--text)]">Choose an icon</p>
+            <p className="text-sm font-medium text-[var(--text)]">
+              Choose an icon or add text
+            </p>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Search the library to start animating.
+              Use icon only, text only, or combine both.
             </p>
           </div>
         ) : (
