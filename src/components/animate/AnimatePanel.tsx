@@ -24,6 +24,7 @@ import {
   MOTION_TOOLS,
   type MotionToolId,
 } from "@/lib/animation/motions";
+import { DEFAULT_FRAME } from "@/lib/animation/types";
 import { MotionDemo } from "@/components/inspector/MotionDemo";
 
 type AnimateSubTab = "presets" | "custom" | "effects";
@@ -157,7 +158,11 @@ export function AnimatePanel() {
   const setPropertyAtPlayhead = useProjectStore((s) => s.setPropertyAtPlayhead);
   const updateTextContent = useProjectStore((s) => s.updateTextContent);
   const renameComponent = useProjectStore((s) => s.renameComponent);
+  const setFrame = useProjectStore((s) => s.setFrame);
+  const setStrokeColor = useProjectStore((s) => s.setStrokeColor);
+  const setStrokeWidth = useProjectStore((s) => s.setStrokeWidth);
   const [subTab, setSubTab] = useState<AnimateSubTab>("presets");
+  const frame = project.frame ?? DEFAULT_FRAME;
 
   const selected = project.components.filter((c) =>
     ui.selectedComponentIds.includes(c.id),
@@ -342,9 +347,89 @@ export function AnimatePanel() {
 
       {subTab === "custom" && (
         <div className="px-1 py-1">
-          {CUSTOM_SECTIONS.map((section, i) => (
+          <div className="px-3 pb-3 pt-3">
+            <p className="text-[13px] font-semibold text-black">Frame</p>
+            <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+              Export artboard around the animation
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <CompactField
+                label="Size"
+                value={frame.size}
+                onChange={(v) => setFrame({ size: v })}
+              />
+              <CompactField
+                label="Padding"
+                value={frame.padding}
+                onChange={(v) => setFrame({ padding: v })}
+              />
+              <CompactField
+                label="Radius"
+                value={frame.radius}
+                onChange={(v) => setFrame({ radius: v })}
+              />
+              <label className="block text-[11px] text-[var(--text-secondary)]">
+                Color
+                <div className="mt-1 flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-1.5">
+                  <input
+                    type="color"
+                    className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                    value={
+                      frame.background === "transparent"
+                        ? "#ffffff"
+                        : frame.background || "#ffffff"
+                    }
+                    onChange={(e) => setFrame({ background: e.target.value })}
+                    aria-label="Frame color"
+                  />
+                  <button
+                    type="button"
+                    className={cn(
+                      "rounded px-1.5 text-[10px] font-medium",
+                      frame.background === "transparent"
+                        ? "bg-[#0f9f8a]/15 text-[#0b7f6e]"
+                        : "text-[var(--text-secondary)] hover:bg-black/[0.04]",
+                    )}
+                    onClick={() =>
+                      setFrame({
+                        background:
+                          frame.background === "transparent"
+                            ? "#ffffff"
+                            : "transparent",
+                      })
+                    }
+                  >
+                    Clear
+                  </button>
+                </div>
+              </label>
+              <label className="block text-[11px] text-[var(--text-secondary)]">
+                Icon color
+                <div className="mt-1 flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-1.5">
+                  <input
+                    type="color"
+                    className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                    value={project.strokeColor || "#171717"}
+                    onChange={(e) => setStrokeColor(e.target.value)}
+                    aria-label="Icon color"
+                  />
+                  <span className="truncate text-[11px] text-[var(--text)]">
+                    {project.strokeColor || "#171717"}
+                  </span>
+                </div>
+              </label>
+              <CompactField
+                label="Stroke"
+                value={project.strokeWidth}
+                step={0.5}
+                onChange={(v) => setStrokeWidth(v)}
+              />
+            </div>
+          </div>
+
+          {CUSTOM_SECTIONS.map((section) => (
             <div key={section.title}>
-              {i > 0 && <div className="mx-3 border-t border-black/[0.06]" />}
+              <div className="mx-3 border-t border-black/[0.06]" />
               <p className="px-3 pb-1 pt-3 text-[13px] font-semibold text-black">
                 {section.title}
               </p>

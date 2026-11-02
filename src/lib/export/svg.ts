@@ -1,9 +1,16 @@
-import type { AnimationDocument, ParsedSvg } from "@/lib/animation/types";
+import type {
+  AnimationDocument,
+  FrameSettings,
+  ParsedSvg,
+} from "@/lib/animation/types";
+import { DEFAULT_FRAME } from "@/lib/animation/types";
 import { serializeElementsToSvg } from "@/lib/svg/parse";
+import { wrapSvgInFrame } from "@/lib/export/frame";
 
 export function exportAnimatedSvg(
   parsed: ParsedSvg,
   doc: AnimationDocument,
+  frame: FrameSettings = DEFAULT_FRAME,
 ): string {
   const base = serializeElementsToSvg(parsed);
   const durationSec = (doc.duration / 1000).toFixed(3);
@@ -50,5 +57,6 @@ export function exportAnimatedSvg(
   });
 
   const style = `<style><![CDATA[\n${keyframeBlocks.join("\n")}\n${styleRules.join("\n")}\n]]></style>`;
-  return base.replace(/(<svg[^>]*>)/, `$1${style}`);
+  const animated = base.replace(/(<svg[^>]*>)/, `$1${style}`);
+  return wrapSvgInFrame(animated, frame);
 }

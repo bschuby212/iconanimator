@@ -68,10 +68,16 @@ export function ExportDialog() {
           project.parsed,
           project.animation,
           project.components,
+          "AnimatedIcon",
+          project.frame,
         );
         download("AnimatedIcon.tsx", code, "text/plain");
       } else if (format === "svg") {
-        const svg = exportAnimatedSvg(project.parsed, project.animation);
+        const svg = exportAnimatedSvg(
+          project.parsed,
+          project.animation,
+          project.frame,
+        );
         download("animated-icon.svg", svg, "image/svg+xml");
       } else if (format === "css") {
         download(

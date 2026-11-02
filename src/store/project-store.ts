@@ -3,12 +3,14 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 import {
+  DEFAULT_FRAME,
   DEFAULT_INTENT,
   type AnimationDocument,
   type AnimationIntent,
   type AnimationPlan,
   type ChatMessage,
   type CreationHistoryEntry,
+  type FrameSettings,
   type IconSelection,
   type ParsedSvg,
   type ProjectState,
@@ -37,8 +39,6 @@ import {
 } from "@/lib/animation/motions";
 import type { ElementTrack } from "@/lib/animation/types";
 
-export type CanvasBg = "canvas" | "white" | "transparent";
-
 export type RightTab = "chat" | "animate" | "layers";
 
 export interface UiState {
@@ -52,7 +52,6 @@ export interface UiState {
   currentTime: number;
   playing: boolean;
   zoom: number;
-  canvasBg: CanvasBg;
   exportOpen: boolean;
   historyOpen: boolean;
   readyToGenerate: boolean;
@@ -76,12 +75,15 @@ interface Store {
   duplicateProject: () => void;
   clearAnimation: () => void;
   setZoom: (z: number) => void;
-  setCanvasBg: (bg: CanvasBg) => void;
   setExportOpen: (v: boolean) => void;
   setHistoryOpen: (v: boolean) => void;
   setCurrentTime: (t: number) => void;
   setPlaying: (p: boolean) => void;
   setIconSize: (size: number) => void;
+  setStrokeColor: (color: string) => void;
+  setStrokeWidth: (width: number) => void;
+  setFillColor: (color: string) => void;
+  setFrame: (partial: Partial<FrameSettings>) => void;
   setIntent: (partial: Partial<AnimationIntent>) => void;
   selectIcon: (icon: IconSelection) => void;
   uploadSvg: (svg: string, name?: string) => void;
@@ -156,6 +158,7 @@ function freshProject(): ProjectState {
     strokeWidth: 2,
     strokeColor: "#171717",
     fillColor: "none",
+    frame: { ...DEFAULT_FRAME },
   };
 }
 
@@ -226,7 +229,6 @@ const defaultUi: UiState = {
   currentTime: 0,
   playing: false,
   zoom: 1,
-  canvasBg: "canvas",
   exportOpen: false,
   historyOpen: false,
   readyToGenerate: false,
@@ -244,7 +246,6 @@ export const useProjectStore = create<Store>((set, get) => ({
     set((s) => ({ ui: { ...s.ui, timelineHeight: Math.min(420, Math.max(160, h)) } })),
   setZoom: (z) =>
     set((s) => ({ ui: { ...s.ui, zoom: Math.min(3, Math.max(0.5, Number(z.toFixed(2)))) } })),
-  setCanvasBg: (bg) => set((s) => ({ ui: { ...s.ui, canvasBg: bg } })),
   setExportOpen: (v) => set((s) => ({ ui: { ...s.ui, exportOpen: v } })),
   setHistoryOpen: (v) => set((s) => ({ ui: { ...s.ui, historyOpen: v } })),
   setCurrentTime: (t) => set((s) => ({ ui: { ...s.ui, currentTime: t } })),
@@ -256,6 +257,28 @@ export const useProjectStore = create<Store>((set, get) => ({
         iconSize: Math.min(ICON_SIZE_MAX, Math.max(ICON_SIZE_MIN, Math.round(size))),
       },
     })),
+  setStrokeColor: (color) =>
+    set((s) => ({ project: { ...s.project, strokeColor: color } })),
+  setStrokeWidth: (width) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        strokeWidth: Math.min(8, Math.max(0.5, Number(width))),
+      },
+    })),
+  setFillColor: (color) =>
+    set((s) => ({ project: { ...s.project, fillColor: color } })),
+  setFrame: (partial) =>
+    set((s) => {
+      const next = { ...(s.project.frame ?? DEFAULT_FRAME), ...partial };
+      next.size = Math.min(512, Math.max(48, Math.round(next.size)));
+      next.padding = Math.min(
+        Math.floor(next.size / 2) - 8,
+        Math.max(0, Math.round(next.padding)),
+      );
+      next.radius = Math.min(next.size / 2, Math.max(0, Math.round(next.radius)));
+      return { project: { ...s.project, frame: next } };
+    }),
 
   setIntent: (partial) =>
     set((s) => ({
@@ -945,6 +968,7 @@ export const useProjectStore = create<Store>((set, get) => ({
           ICON_SIZE_MAX,
           Math.max(ICON_SIZE_MIN, project.iconSize || ICON_SIZE_DEFAULT),
         ),
+        frame: { ...DEFAULT_FRAME, ...(project.frame ?? {}) },
       },
       ui: {
         ...defaultUi,

@@ -191,6 +191,25 @@ export interface CreationHistoryEntry {
   conversation: ChatMessage[];
 }
 
+/** Export artboard around the animated icon — this is what leaves the editor. */
+export interface FrameSettings {
+  /** Outer frame size in CSS pixels at 100% zoom */
+  size: number;
+  /** Frame fill; use "transparent" for no fill */
+  background: string;
+  /** Corner radius in CSS pixels */
+  radius: number;
+  /** Inset padding between frame edge and icon */
+  padding: number;
+}
+
+export const DEFAULT_FRAME: FrameSettings = {
+  size: 128,
+  background: "#ffffff",
+  radius: 16,
+  padding: 32,
+};
+
 export interface ProjectState {
   id: string;
   name: string;
@@ -211,6 +230,7 @@ export interface ProjectState {
   strokeWidth: number;
   strokeColor: string;
   fillColor: string;
+  frame: FrameSettings;
 }
 
 export interface ElementTransform {

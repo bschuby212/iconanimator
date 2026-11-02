@@ -46,7 +46,27 @@ body {
 }
 
 .canvas-surface {
-  background: var(--canvas);
+  /* Fixed editor backdrop — never exported */
+  background-color: #ececee;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.045) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center center;
+}
+
+.export-frame {
+  position: relative;
+  box-sizing: border-box;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 8px 28px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.export-frame svg {
+  display: block;
+  overflow: visible !important;
 }
 
 .icon-stage {
