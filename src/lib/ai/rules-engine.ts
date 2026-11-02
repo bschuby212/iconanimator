@@ -84,8 +84,51 @@ export function parseScalePeak(prompt: string): number | null {
   return null;
 }
 
+/**
+ * Detect prompts that explicitly reject scaling / size change
+ * (e.g. "don't increase size while spinning", "no scaling", "keep size the same").
+ */
+export function rejectsScaleMotion(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  if (
+    /\b(don'?t|do not|never|no longer|stop|without|remove|delete|drop)\b[\s\S]{0,48}\b(scale|scaling|grow|growing|enlarge|enlarging|bigger)\b/.test(
+      p,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(don'?t|do not|never|no longer|stop|without|remove|delete|drop)\b[\s\S]{0,48}\b(increase|changing|change|grow)\b[\s\S]{0,24}\bsize\b/.test(
+      p,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(no|without)\s+(more\s+)?(scale|scaling|size\s+change|size\s+increase|growing)\b/.test(
+      p,
+    )
+  ) {
+    return true;
+  }
+  if (/\b(keep|same|constant|fixed|steady)\s+(the\s+)?size\b/.test(p)) {
+    return true;
+  }
+  if (/\bsize\s+(stay|stays|staying|remain|remains|constant|fixed|same)\b/.test(p)) {
+    return true;
+  }
+  if (
+    /\bonly\b[\s\S]{0,24}\b(rotat|spin)/.test(p) &&
+    !/\b(and|with|plus)\b[\s\S]{0,16}\b(scale|size|grow)/.test(p)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function wantsScaleMotion(prompt: string): boolean {
   const p = prompt.toLowerCase();
+  if (rejectsScaleMotion(p)) return false;
   if (parseScalePeak(p) != null) return true;
   return (
     p.includes("grow") ||
@@ -93,6 +136,7 @@ export function wantsScaleMotion(prompt: string): boolean {
     p.includes("bigger") ||
     p.includes("shrink") ||
     p.includes("pulse") ||
+    /\bincrease(?:\s+\w+){0,3}\s+size\b/.test(p) ||
     /\bsize\b/.test(p) ||
     p.includes("enlarge") ||
     p.includes("smaller")
@@ -485,7 +529,10 @@ export function buildPlanFromPrompt(
     });
     const dirLabel = rot < 0 ? "counterclockwise" : "clockwise";
     steps.push(step(`Rotate the gear ${dirLabel} ${Math.abs(rot)}°.`, target));
-    if (wantsScaleMotion(prompt) || intent.complexity !== "simple") {
+    if (
+      !rejectsScaleMotion(prompt) &&
+      (wantsScaleMotion(prompt) || intent.complexity !== "simple")
+    ) {
       const s = parseScalePeak(prompt) ?? defaultPeakScale(intent);
       steps.push(step(`Scale up to ${Math.round(s * 100)}%.`, target));
       steps.push(step("Return scale to 100%.", target));
@@ -769,7 +816,9 @@ export function generateAnimationFromPlan(
       continuousDefault: 360,
     });
     const peakScale = parseScalePeak(prompt) ?? defaultPeakScale(intent);
-    const wantScale = wantsScaleMotion(prompt) || intent.complexity !== "simple";
+    const wantScale =
+      !rejectsScaleMotion(prompt) &&
+      (wantsScaleMotion(prompt) || intent.complexity !== "simple");
     const wantReverse = p.includes("reverse") && !wantsLoopFromPrompt(prompt, intent);
     const pauseBefore = wantsPauseBeforeStart(prompt);
     const wantPause =
@@ -1128,11 +1177,8 @@ export function refineAnimation(
     return next;
   }
 
-  // Remove scale / keep only rotation
-  if (
-    (p.includes("remove") || p.includes("delete") || p.includes("drop") || p.includes("without")) &&
-    (p.includes("scale") || p.includes("scaling") || p.includes("size"))
-  ) {
+  // Remove scale / keep only rotation — including natural "don't increase size while spinning"
+  if (rejectsScaleMotion(instruction)) {
     removeScaleTracks(next);
     return next;
   }

@@ -1037,12 +1037,20 @@ export const useProjectStore = create<Store>((set, get) => ({
     const userMsg = createUserMessage(message);
     const before = project.animation;
     const refined = refineAnimation(project.animation, message);
+    const beforeScale = before.tracks.some((t) =>
+      t.properties.some((pr) => pr.property === "scaleX" || pr.property === "scaleY"),
+    );
+    const afterScale = refined.tracks.some((t) =>
+      t.properties.some((pr) => pr.property === "scaleX" || pr.property === "scaleY"),
+    );
     const changed =
       refined.duration !== before.duration ||
       JSON.stringify(refined.tracks) !== JSON.stringify(before.tracks);
     const assistant = createAssistantMessage(
       changed
-        ? "Updated the animation from your instruction."
+        ? beforeScale && !afterScale
+          ? "Removed the size change — keeping the spin only."
+          : "Updated the animation from your instruction."
         : "I couldn't map that to a concrete change — try being specific about duration, direction, scale, or which property to remove.",
     );
     const conversation = [...project.conversation, userMsg, assistant];

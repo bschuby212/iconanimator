@@ -90,6 +90,43 @@ body {
   border-radius: 10px;
 }
 
+/* Subtle AI sparkle avatar (replaces "AI" word mark in chat) */
+.ai-sparkle-avatar {
+  background: rgba(15, 159, 138, 0.12);
+  color: #0f9f8a;
+}
+
+.ai-sparkle-icon {
+  animation: ai-sparkle-twinkle 2.6s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+}
+
+@keyframes ai-sparkle-twinkle {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92) rotate(-6deg);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.08) rotate(8deg);
+    filter: drop-shadow(0 0 4px rgba(15, 159, 138, 0.35));
+  }
+  60% {
+    opacity: 0.85;
+    transform: scale(1.02) rotate(2deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-sparkle-icon {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
 /* Playhead / time scrubber — brand green, never browser-default blue */
 .timeline-scrubber {
   -webkit-appearance: none;

@@ -6,6 +6,7 @@ import {
   parseRotationDegrees,
   parseScalePeak,
   refineAnimation,
+  rejectsScaleMotion,
   wantsScaleMotion,
 } from "@/lib/ai/rules-engine";
 import { DEFAULT_INTENT, type SvgComponent } from "@/lib/animation/types";
@@ -34,6 +35,19 @@ describe("prompt parsers", () => {
     expect(parseScalePeak("increase its size to 120%, then back to 100%")).toBeCloseTo(1.2);
     expect(parseScalePeak("only increasing to 110%")).toBeCloseTo(1.1);
     expect(parseScalePeak("stay at 100%")).toBeNull();
+    expect(wantsScaleMotion("increase its size to 120%")).toBe(true);
+  });
+
+  it("understands don't-increase-size / no-scale phrasing", () => {
+    expect(
+      rejectsScaleMotion("don't increase size while gear is spinning"),
+    ).toBe(true);
+    expect(rejectsScaleMotion("dont increase the size while spinning")).toBe(true);
+    expect(rejectsScaleMotion("keep the size the same and just spin")).toBe(true);
+    expect(rejectsScaleMotion("spin with no scaling")).toBe(true);
+    expect(wantsScaleMotion("don't increase size while gear is spinning")).toBe(
+      false,
+    );
     expect(wantsScaleMotion("increase its size to 120%")).toBe(true);
   });
 
@@ -142,5 +156,20 @@ describe("refine follow-ups", () => {
     expect(track?.properties.some((p) => p.property === "scaleX")).toBe(false);
     expect(track?.properties.some((p) => p.property === "rotation")).toBe(true);
     expect(Number(getElementPropertyAt(next, "el_gear", "scaleX", 1000) ?? 1)).toBeCloseTo(1, 2);
+  });
+
+  it("handles don't increase size while spinning", () => {
+    const doc = baseDoc();
+    const next = refineAnimation(
+      doc,
+      "don't increase size while gear is spinning",
+    );
+    const track = next.tracks.find((t) => t.elementId === "el_gear");
+    expect(track?.properties.some((p) => p.property === "scaleX")).toBe(false);
+    expect(track?.properties.some((p) => p.property === "scaleY")).toBe(false);
+    expect(track?.properties.some((p) => p.property === "rotation")).toBe(true);
+    expect(Number(getElementPropertyAt(next, "el_gear", "scaleX", 1000) ?? 1)).toBeCloseTo(1, 2);
+    const rot = track?.properties.find((p) => p.property === "rotation");
+    expect(Number(rot?.keyframes[rot.keyframes.length - 1]?.value)).toBeCloseTo(360, 0);
   });
 });
