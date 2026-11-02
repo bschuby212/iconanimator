@@ -11,6 +11,7 @@ export function LayersPanel() {
   const ui = useProjectStore((s) => s.ui);
   const selectComponents = useProjectStore((s) => s.selectComponents);
   const selectElements = useProjectStore((s) => s.selectElements);
+  const selectCanvasElement = useProjectStore((s) => s.selectCanvasElement);
   const renameComponent = useProjectStore((s) => s.renameComponent);
   const setRightTab = useProjectStore((s) => s.setRightTab);
 
@@ -92,13 +93,7 @@ export function LayersPanel() {
                   node={node}
                   depth={0}
                   selectedIds={ui.selectedElementIds}
-                  onSelect={(id) => {
-                    selectElements([id]);
-                    const cmp = project.components.find((c) =>
-                      c.elementIds.includes(id),
-                    );
-                    if (cmp) selectComponents([cmp.id]);
-                  }}
+                  onSelect={(id) => selectCanvasElement(id)}
                 />
               ))}
             </ul>

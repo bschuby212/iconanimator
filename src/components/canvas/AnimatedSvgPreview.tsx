@@ -63,14 +63,21 @@ function AnimatedNode({
     ...(t.fill ? { fill: t.fill } : {}),
     ...(t.stroke ? { stroke: t.stroke } : {}),
     ...(t.strokeWidth !== undefined ? { strokeWidth: t.strokeWidth } : {}),
-    style: selected
-      ? { outline: "1px solid var(--accent)", outlineOffset: 2 }
-      : undefined,
+    style: {
+      cursor: "pointer",
+      // Use full geometry bounds so thin stroke-only icons are easy to click
+      pointerEvents: "all" as const,
+      ...(selected
+        ? {
+            filter: "url(#animator-selection-glow)",
+          }
+        : {}),
+    },
   };
 
   if (node.tag === "g") {
     return (
-      <g {...common}>
+      <g {...common} style={{ cursor: "pointer", pointerEvents: "all" }}>
         {node.children.map((child) => (
           <AnimatedNode
             key={child.id}
@@ -92,7 +99,7 @@ function AnimatedNode({
   if (node.tag === "polygon") return <polygon {...common} />;
   if (node.tag === "text") {
     return (
-      <text {...common}>
+      <text {...common} style={{ ...common.style, pointerEvents: "all" }}>
         {node.children.length
           ? node.children.map((child) => (
               <AnimatedNode
@@ -137,12 +144,37 @@ export function AnimatedSvgPreview({
       overflow="visible"
       style={{ color, overflow: "visible", maxWidth: "none" }}
       className="block select-none overflow-visible"
+      data-testid="animated-svg-preview"
       onClick={(e) => {
+        e.stopPropagation();
         const target = e.target as Element;
-        const id = target.closest("[data-animator-id]")?.getAttribute("data-animator-id");
+        if (target === e.currentTarget) {
+          onSelectElement(null);
+          return;
+        }
+        const id = target
+          .closest("[data-animator-id]")
+          ?.getAttribute("data-animator-id");
         onSelectElement(id ?? null);
       }}
     >
+      <defs>
+        <filter
+          id="animator-selection-glow"
+          x="-20%"
+          y="-20%"
+          width="140%"
+          height="140%"
+        >
+          <feDropShadow
+            dx="0"
+            dy="0"
+            stdDeviation="0.6"
+            floodColor="#0f9f8a"
+            floodOpacity="0.95"
+          />
+        </filter>
+      </defs>
       {parsed.elements.map((node) => (
         <AnimatedNode
           key={node.id}

@@ -3,7 +3,6 @@ import * as ph from "@iconify-json/ph";
 import * as tabler from "@iconify-json/tabler";
 import * as lucide from "@iconify-json/lucide";
 import * as heroicons from "@iconify-json/heroicons";
-import * as ri from "@iconify-json/ri";
 import * as iconoir from "@iconify-json/iconoir";
 import * as bi from "@iconify-json/bi";
 import * as material from "@iconify-json/material-symbols";
@@ -19,7 +18,7 @@ import { parseSvg } from "@/lib/svg/parse";
 import { sanitizeSvg } from "@/lib/svg/sanitize";
 
 describe("icon library registry", () => {
-  it("registers all PRD libraries", () => {
+  it("registers license-safe PRD libraries (Remix omitted)", () => {
     const ids = LIBRARIES.map((l) => l.id);
     expect(ids).toEqual(
       expect.arrayContaining([
@@ -27,13 +26,13 @@ describe("icon library registry", () => {
         "tabler",
         "lucide",
         "heroicons",
-        "ri",
         "iconoir",
         "bi",
         "material-symbols",
       ]),
     );
     expect(ids).not.toContain("hugeicons");
+    expect(ids).not.toContain("ri");
   });
 
   it("loads official iconify JSON with substantial icon counts", async () => {
@@ -42,7 +41,6 @@ describe("icon library registry", () => {
       tabler: 1000,
       lucide: 500,
       heroicons: 200,
-      ri: 500,
       iconoir: 200,
       bi: 500,
       "material-symbols": 1000,
@@ -108,24 +106,29 @@ describe("icon library registry", () => {
       [lucide, "heart", "lucide"],
       [heroicons, "bell", "heroicons"],
       [ph, "gear", "ph"],
-      [ri, "home-line", "ri"],
       [iconoir, "heart", "iconoir"],
       [bi, "house", "bi"],
       [material, "home", "material-symbols"],
     ];
     for (const [mod, name, lib] of samples) {
       const json = resolveIconifyJSON(mod);
-      // material/ri names may vary — try fallbacks
       let rec = getIconSvgSync(json, name, lib as never);
       if (!rec) {
         const first = Object.keys(json.icons).find((n) => n.includes(name));
         if (first) rec = getIconSvgSync(json, first, lib as never);
       }
       expect(rec, `${lib} ${name}`).toBeTruthy();
+      expect(rec!.svg).toMatch(/<path|<circle|<rect|<g/i);
       const cleaned = sanitizeSvg(rec!.svg);
       const parsed = parseSvg(cleaned);
       expect(parsed.viewBox).toBeTruthy();
       expect(parsed.elements.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("each library entry documents a permissive license", () => {
+    for (const lib of LIBRARIES) {
+      expect(lib.license.toLowerCase()).toMatch(/mit|isc|apache/);
     }
   });
 });

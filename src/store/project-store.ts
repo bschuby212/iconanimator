@@ -90,6 +90,8 @@ interface Store {
   uploadSvg: (svg: string, name?: string) => void;
   selectComponents: (ids: string[]) => void;
   selectElements: (ids: string[]) => void;
+  /** Canvas click: select a single SVG path/group and make it animatable. */
+  selectCanvasElement: (elementId: string | null) => void;
   renameComponent: (id: string, name: string) => void;
   setTransformOrigin: (
     componentId: string,
@@ -377,6 +379,51 @@ export const useProjectStore = create<Store>((set, get) => ({
     })),
   selectElements: (ids) =>
     set((s) => ({ ui: { ...s.ui, selectedElementIds: ids } })),
+
+  selectCanvasElement: (elementId) => {
+    if (!elementId) {
+      set((s) => ({
+        ui: {
+          ...s.ui,
+          selectedComponentIds: [],
+          selectedElementIds: [],
+        },
+      }));
+      return;
+    }
+
+    const { project } = get();
+    if (!project.parsed?.elementMap[elementId]) return;
+
+    // Prefer an existing single-element component for this path
+    let components = project.components;
+    let focused = components.find(
+      (c) => c.elementIds.length === 1 && c.elementIds[0] === elementId,
+    );
+
+    // Otherwise isolate the path so Animate/motions target only it
+    if (!focused) {
+      const node = project.parsed.elementMap[elementId];
+      const label =
+        node.originalId ||
+        `${node.tag}${components.filter((c) => c.role === "other").length + 1}`;
+      components = groupElements(components, [elementId], label, "other");
+      focused = components.find(
+        (c) => c.elementIds.length === 1 && c.elementIds[0] === elementId,
+      );
+    }
+
+    set({
+      project: { ...project, components },
+      ui: {
+        ...get().ui,
+        selectedElementIds: [elementId],
+        selectedComponentIds: focused ? [focused.id] : [],
+        rightTab: "animate",
+        rightOpen: true,
+      },
+    });
+  },
 
   renameComponent: (id, name) =>
     set((s) => ({

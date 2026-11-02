@@ -13,7 +13,6 @@ export type LibraryId =
   | "feather"
   | "heroicons"
   | "ph"
-  | "ri"
   | "iconoir"
   | "bi"
   | "material-symbols";
@@ -29,8 +28,10 @@ export interface LibraryMeta {
 }
 
 /**
- * Official Iconify JSON packs — raw SVG geometry via Iconify, not React components.
- * Remix (`ri`) ships under Apache-2.0 in @iconify-json/ri; verify product terms before redistribution.
+ * Official Iconify JSON packs — raw SVG path geometry (not React icon components).
+ *
+ * Remix Icon is intentionally omitted: Remix Icon License v1.0 (2026) prohibits
+ * redistributing the set as part of a competing / primary icon library product.
  */
 export const LIBRARIES: LibraryMeta[] = [
   {
@@ -60,13 +61,6 @@ export const LIBRARIES: LibraryMeta[] = [
     license: "MIT",
     prefix: "heroicons",
     hasVariants: true,
-  },
-  {
-    id: "ri",
-    name: "Remix Icon",
-    license: "Apache-2.0 (verify product use)",
-    prefix: "ri",
-    hasVariants: false,
   },
   {
     id: "iconoir",
@@ -130,9 +124,6 @@ async function loadCollection(id: LibraryId): Promise<IconifyJSON | null> {
         break;
       case "ph":
         mod = await import("@iconify-json/ph");
-        break;
-      case "ri":
-        mod = await import("@iconify-json/ri");
         break;
       case "iconoir":
         mod = await import("@iconify-json/iconoir");

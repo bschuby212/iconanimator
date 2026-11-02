@@ -23,9 +23,7 @@ export function AnimationCanvas() {
   const setPlaying = useProjectStore((s) => s.setPlaying);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const setZoom = useProjectStore((s) => s.setZoom);
-  const selectComponents = useProjectStore((s) => s.selectComponents);
-  const selectElements = useProjectStore((s) => s.selectElements);
-  const setRightTab = useProjectStore((s) => s.setRightTab);
+  const selectCanvasElement = useProjectStore((s) => s.selectCanvasElement);
   const raf = useRef<number>(0);
   const last = useRef<number>(0);
   const timeRef = useRef(ui.currentTime);
@@ -188,21 +186,7 @@ export function AnimationCanvas() {
                 selectedElementIds={selectedElementIds}
                 size={iconDisplay}
                 color={project.strokeColor}
-                onSelectElement={(id) => {
-                  if (!id) {
-                    selectComponents([]);
-                    selectElements([]);
-                    return;
-                  }
-                  // Direct canvas path/group click → select that SVG element
-                  selectElements([id]);
-                  const cmp = project.components.find((c) =>
-                    c.elementIds.includes(id),
-                  );
-                  if (cmp) selectComponents([cmp.id]);
-                  else selectComponents([]);
-                  setRightTab("layers");
-                }}
+                onSelectElement={(id) => selectCanvasElement(id)}
               />
             </div>
           </div>

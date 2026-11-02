@@ -17,8 +17,6 @@ export const LIBRARY_LOGOS: Record<LibraryId | "all", string> = {
 
   ph: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2.2l8 4.6v10.4l-8 4.6-8-4.6V6.8l8-4.6z" fill="#3D348B"/><path d="M10 8h2.4c1.65 0 2.7 1 2.7 2.45S14.05 13 12.4 13H11.5v3H10V8zm1.5 3.5h.8c.7 0 1.15-.4 1.15-1.05S13 9.4 12.3 9.4h-.8v2.1z" fill="#fff"/></svg>`,
 
-  ri: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#111"/><path d="M7 7h4.2c1.9 0 3.2 1.2 3.2 3s-1.3 3-3.2 3H9.2V17H7V7zm2.2 4.5h1.7c.75 0 1.25-.45 1.25-1.1S11.65 9.3 10.9 9.3H9.2v2.2z" fill="#fff"/></svg>`,
-
   iconoir: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#000"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="#fff"/></svg>`,
 
   bi: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#7952B3"/><path d="M8 7h3.1c1.7 0 2.9 1 2.9 2.55 0 1.15-.65 1.95-1.7 2.25L14.2 17h-2.3l-1.85-4.4H9.7V17H8V7zm1.7 4.1h1.2c.75 0 1.2-.4 1.2-1.05s-.45-1.05-1.2-1.05H9.7v2.1z" fill="#fff"/></svg>`,
