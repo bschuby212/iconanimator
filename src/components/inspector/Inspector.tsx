@@ -238,7 +238,7 @@ export function Inspector() {
                       title={tool.description}
                       disabled={!project.components.length}
                       onClick={() => onMotion(tool.id)}
-                      className="rounded-lg border border-[var(--border)] bg-[#f7f7f7] px-2 py-2 text-left transition-colors hover:border-[#0f9f8a]/40 hover:bg-[#0f9f8a]/8 disabled:opacity-40"
+                      className="group rounded-lg border border-[var(--border)] bg-white px-2 py-2 text-left transition-colors hover:border-[#0f9f8a]/40 disabled:opacity-40"
                     >
                       <MotionDemo toolId={tool.id} iconSvg={iconSvg} />
                       <span className="mt-1.5 block text-[11px] font-medium text-black">

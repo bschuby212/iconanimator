@@ -269,60 +269,61 @@ body {
   }
 }
 
-.motion-demo--move-x {
+/* Idle until the parent motion card (.group) is hovered */
+.group:hover .motion-demo--move-x {
   animation: md-move-x 1.2s ease-in-out infinite;
 }
-.motion-demo--move-y {
+.group:hover .motion-demo--move-y {
   animation: md-move-y 1.2s ease-in-out infinite;
 }
-.motion-demo--move-up {
+.group:hover .motion-demo--move-up {
   animation: md-move-up 1.2s ease-in-out infinite;
 }
-.motion-demo--move-down {
+.group:hover .motion-demo--move-down {
   animation: md-move-down 1.2s ease-in-out infinite;
 }
-.motion-demo--rotate {
+.group:hover .motion-demo--rotate {
   animation: md-rotate 1.6s linear infinite;
 }
-.motion-demo--rotate-ccw {
+.group:hover .motion-demo--rotate-ccw {
   animation: md-rotate-ccw 1.6s linear infinite;
 }
-.motion-demo--scale-up {
+.group:hover .motion-demo--scale-up {
   animation: md-scale-up 1.2s ease-in-out infinite;
 }
-.motion-demo--scale-down {
+.group:hover .motion-demo--scale-down {
   animation: md-scale-down 1.2s ease-in-out infinite;
 }
-.motion-demo--skew-x {
+.group:hover .motion-demo--skew-x {
   animation: md-skew-x 1.2s ease-in-out infinite;
 }
-.motion-demo--fade-in {
+.group:hover .motion-demo--fade-in {
   animation: md-fade-in 1.4s ease-in-out infinite alternate;
 }
-.motion-demo--fade-out {
+.group:hover .motion-demo--fade-out {
   animation: md-fade-out 1.4s ease-in-out infinite alternate;
 }
-.motion-demo--appear {
+.group:hover .motion-demo--appear {
   animation: md-appear 1.4s ease-out infinite alternate;
 }
-.motion-demo--disappear {
+.group:hover .motion-demo--disappear {
   animation: md-disappear 1.4s ease-in infinite alternate;
 }
-.motion-demo--pulse {
+.group:hover .motion-demo--pulse {
   animation: md-pulse 1s ease-in-out infinite;
 }
-.motion-demo--bounce {
+.group:hover .motion-demo--bounce {
   animation: md-bounce 0.9s ease-in-out infinite;
 }
-.motion-demo--shake {
+.group:hover .motion-demo--shake {
   animation: md-shake 0.5s ease-in-out infinite;
 }
-.motion-demo--float {
+.group:hover .motion-demo--float {
   animation: md-float 1.6s ease-in-out infinite;
 }
-.motion-demo--pop {
+.group:hover .motion-demo--pop {
   animation: md-pop 1.2s ease-out infinite;
 }
-.motion-demo--wiggle {
+.group:hover .motion-demo--wiggle {
   animation: md-wiggle 0.8s ease-in-out infinite;
 }

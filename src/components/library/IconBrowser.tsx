@@ -201,7 +201,7 @@ export function IconBrowser() {
             className="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-white text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--bg)]"
           >
             <Type className="h-3.5 w-3.5" />
-            {hasText ? "Add text" : "Text only"}
+            Add text
           </button>
           {hasIcon && hasText && (
             <button
@@ -214,15 +214,6 @@ export function IconBrowser() {
             </button>
           )}
         </div>
-        <p className="text-[10px] text-[var(--text-secondary)]">
-          {hasIcon && hasText
-            ? "Composition: icon + text"
-            : hasIcon
-              ? "Composition: icon only — add text anytime"
-              : hasText
-                ? "Composition: text only — pick an icon to combine"
-                : "Start with an icon, text, or both"}
-        </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

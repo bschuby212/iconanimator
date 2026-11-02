@@ -17,7 +17,7 @@ export function MotionDemo({
   return (
     <div
       className={cn(
-        "motion-demo flex h-10 w-full items-center justify-center overflow-hidden rounded-md bg-white",
+        "motion-demo flex h-10 w-full items-center justify-center overflow-hidden",
         className,
       )}
     >
