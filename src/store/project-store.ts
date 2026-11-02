@@ -105,6 +105,7 @@ interface Store {
       fontSize?: number;
       fill?: string;
       fontWeight?: string | number;
+      fontFamily?: string;
     },
   ) => void;
   removeTextLayers: () => void;
@@ -485,7 +486,7 @@ export const useProjectStore = create<Store>((set, get) => ({
         y: String(project.parsed ? vbH + 10 : vbH / 2 + fontSize / 3),
         "font-size": String(fontSize),
         "font-weight": "400",
-        "font-family": "ui-sans-serif, system-ui, sans-serif",
+        "font-family": "Geist, ui-sans-serif, system-ui, sans-serif",
         "text-anchor": "middle",
         fill: project.strokeColor || "#171717",
       },
@@ -607,6 +608,9 @@ export const useProjectStore = create<Store>((set, get) => ({
       }
       if (patch.fontWeight !== undefined) {
         next.attributes["font-weight"] = String(patch.fontWeight);
+      }
+      if (patch.fontFamily !== undefined) {
+        next.attributes["font-family"] = patch.fontFamily;
       }
       elementMap[el.id] = next;
       return next;

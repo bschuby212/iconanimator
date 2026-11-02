@@ -11,11 +11,42 @@ import { AnimatedSvgPreview } from "@/components/canvas/AnimatedSvgPreview";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 
+const TEXT_FONTS = [
+  {
+    value: "Geist, ui-sans-serif, system-ui, sans-serif",
+    label: "Sans",
+  },
+  {
+    value: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+    label: "Serif",
+  },
+  {
+    value: "Geist Mono, ui-monospace, SFMono-Regular, Menlo, monospace",
+    label: "Mono",
+  },
+] as const;
+
 const TEXT_WEIGHTS = [
   { value: "400", label: "Regular" },
   { value: "500", label: "Medium" },
   { value: "700", label: "Bold" },
 ] as const;
+
+const DEFAULT_TEXT_FONT = TEXT_FONTS[0].value;
+
+function matchTextFont(family: string | undefined): string {
+  if (!family) return DEFAULT_TEXT_FONT;
+  const exact = TEXT_FONTS.find((f) => f.value === family);
+  if (exact) return exact.value;
+  const lower = family.toLowerCase();
+  if (lower.includes("mono") || lower.includes("menlo") || lower.includes("courier")) {
+    return TEXT_FONTS[2].value;
+  }
+  if (lower.includes("serif") || lower.includes("georgia") || lower.includes("times")) {
+    return TEXT_FONTS[1].value;
+  }
+  return DEFAULT_TEXT_FONT;
+}
 
 export function AnimationCanvas() {
   const project = useProjectStore((s) => s.project);
@@ -49,6 +80,7 @@ export function AnimationCanvas() {
   }, [textComponent, project.parsed]);
   const textSize = Number(textNode?.attributes["font-size"] ?? 4);
   const textWeight = textNode?.attributes["font-weight"] ?? "400";
+  const textFont = matchTextFont(textNode?.attributes["font-family"]);
 
   useEffect(() => {
     timeRef.current = ui.currentTime;
@@ -120,7 +152,7 @@ export function AnimationCanvas() {
     >
       {/* Floating canvas mini menu — zoom + add text (playback is bottom panel) */}
       <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 px-3">
-        <div className="pointer-events-auto floating-toolbar flex items-center gap-0.5 px-1.5 py-1">
+        <div className="pointer-events-auto floating-toolbar flex items-center gap-1 px-2 py-1.5">
           <Button
             size="icon"
             variant="ghost"
@@ -142,12 +174,12 @@ export function AnimationCanvas() {
           >
             <ZoomIn className="h-3.5 w-3.5" />
           </Button>
-          <div className="mx-0.5 h-4 w-px bg-[var(--border)]" />
+          <div className="mx-1.5 h-4 w-px shrink-0 bg-[var(--border)]" />
           {!textComponent || !textNode ? (
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 gap-1 px-2 text-[12px] font-medium"
+              className="h-8 gap-1.5 px-2.5 text-[12px] font-medium"
               onClick={() => addTextLayer("Label")}
               title="Add text"
               aria-label="Add text"
@@ -158,48 +190,95 @@ export function AnimationCanvas() {
             </Button>
           ) : (
             <div
-              className="flex items-center gap-1"
+              className="flex items-center gap-2.5"
               data-testid="canvas-text-controls"
             >
-              <label className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)]">
-                <span className="sr-only sm:not-sr-only sm:inline">Size</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={24}
-                  step={0.5}
-                  value={Number.isFinite(textSize) ? textSize : 4}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (!Number.isFinite(n)) return;
-                    updateTextContent(textComponent.id, { fontSize: n });
-                  }}
-                  className="h-7 w-12 rounded-md border border-[var(--border)] bg-white px-1.5 text-right text-[12px] tabular-nums text-[var(--text)] outline-none focus:border-[#0f9f8a]/50"
-                  aria-label="Text size"
-                  data-testid="canvas-text-size"
-                />
+              <label className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                  Font
+                </span>
+                <select
+                  value={textFont}
+                  onChange={(e) =>
+                    updateTextContent(textComponent.id, {
+                      fontFamily: e.target.value,
+                    })
+                  }
+                  className="h-7 min-w-[4.75rem] rounded-md border border-[var(--border)] bg-white px-2 text-[12px] text-[var(--text)] outline-none focus:border-[#0f9f8a]/50"
+                  aria-label="Font"
+                  data-testid="canvas-text-font"
+                  style={{ fontFamily: textFont }}
+                >
+                  {TEXT_FONTS.map((f) => (
+                    <option
+                      key={f.value}
+                      value={f.value}
+                      style={{ fontFamily: f.value }}
+                    >
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <select
-                value={
-                  TEXT_WEIGHTS.some((w) => w.value === String(textWeight))
-                    ? String(textWeight)
-                    : "400"
-                }
-                onChange={(e) =>
-                  updateTextContent(textComponent.id, {
-                    fontWeight: e.target.value,
-                  })
-                }
-                className="h-7 rounded-md border border-[var(--border)] bg-white px-1.5 text-[12px] text-[var(--text)] outline-none focus:border-[#0f9f8a]/50"
-                aria-label="Font weight"
-                data-testid="canvas-text-weight"
-              >
-                {TEXT_WEIGHTS.map((w) => (
-                  <option key={w.value} value={w.value}>
-                    {w.label}
-                  </option>
-                ))}
-              </select>
+
+              <label className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                  Size
+                </span>
+                <span className="inline-flex h-7 items-center overflow-hidden rounded-md border border-[var(--border)] bg-white focus-within:border-[#0f9f8a]/50">
+                  <input
+                    type="number"
+                    min={1}
+                    max={24}
+                    step={0.5}
+                    value={Number.isFinite(textSize) ? textSize : 4}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      if (!Number.isFinite(n)) return;
+                      updateTextContent(textComponent.id, { fontSize: n });
+                    }}
+                    className="h-full w-11 border-0 bg-transparent px-2 text-right text-[12px] tabular-nums text-[var(--text)] outline-none"
+                    aria-label="Text size in pixels"
+                    data-testid="canvas-text-size"
+                  />
+                  <span
+                    className="border-l border-[var(--border)] bg-[var(--surface-muted,#f5f5f5)] px-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-secondary)]"
+                    aria-hidden
+                  >
+                    px
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                  Weight
+                </span>
+                <select
+                  value={
+                    TEXT_WEIGHTS.some((w) => w.value === String(textWeight))
+                      ? String(textWeight)
+                      : "400"
+                  }
+                  onChange={(e) =>
+                    updateTextContent(textComponent.id, {
+                      fontWeight: e.target.value,
+                    })
+                  }
+                  className="h-7 min-w-[5.5rem] rounded-md border border-[var(--border)] bg-white px-2 text-[12px] text-[var(--text)] outline-none focus:border-[#0f9f8a]/50"
+                  aria-label="Font weight"
+                  data-testid="canvas-text-weight"
+                >
+                  {TEXT_WEIGHTS.map((w) => (
+                    <option key={w.value} value={w.value}>
+                      {w.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--border)]" />
+
               <Button
                 size="icon"
                 variant="ghost"
