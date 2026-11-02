@@ -40,32 +40,61 @@ function nodeProps(node: SvgElementNode) {
   return attrs;
 }
 
+function isIdentityTransform(t: ElementTransform): boolean {
+  return (
+    t.x === 0 &&
+    t.y === 0 &&
+    t.rotation === 0 &&
+    t.scaleX === 1 &&
+    t.scaleY === 1 &&
+    t.skewX === 0 &&
+    t.skewY === 0
+  );
+}
+
 function AnimatedNode({
   node,
   transforms,
   selectedIds,
+  originX,
+  originY,
 }: {
   node: SvgElementNode;
   transforms: Record<string, ElementTransform>;
   selectedIds: Set<string>;
+  originX: number;
+  originY: number;
 }) {
-  const t = transforms[node.id] ?? DEFAULT_TRANSFORM;
+  const hasTrack = Object.prototype.hasOwnProperty.call(transforms, node.id);
+  const t = hasTrack ? transforms[node.id] : DEFAULT_TRANSFORM;
   const origin = t.transformOrigin;
-  const ox = origin.absolute ? origin.x : 12;
-  const oy = origin.absolute ? origin.y : 12;
-  const transform = transformToSvgAttribute(t, ox, oy);
+  const ox = origin.absolute ? origin.x : originX;
+  const oy = origin.absolute ? origin.y : originY;
+  // Preserve original SVG transform attributes when we are not animating this node
+  const animatedTransform =
+    hasTrack && !isIdentityTransform(t)
+      ? transformToSvgAttribute(t, ox, oy)
+      : hasTrack
+        ? transformToSvgAttribute(t, ox, oy)
+        : undefined;
   const selected = selectedIds.has(node.id);
+  const base = nodeProps(node);
   const common = {
-    ...nodeProps(node),
+    ...base,
     "data-animator-id": node.id,
-    transform,
-    opacity: t.opacity,
+    ...(animatedTransform
+      ? {
+          transform: base.transform
+            ? `${animatedTransform} ${base.transform}`
+            : animatedTransform,
+        }
+      : {}),
+    ...(hasTrack ? { opacity: t.opacity } : {}),
     ...(t.fill ? { fill: t.fill } : {}),
     ...(t.stroke ? { stroke: t.stroke } : {}),
     ...(t.strokeWidth !== undefined ? { strokeWidth: t.strokeWidth } : {}),
     style: {
       cursor: "pointer",
-      // Use full geometry bounds so thin stroke-only icons are easy to click
       pointerEvents: "all" as const,
       ...(selected
         ? {
@@ -84,6 +113,8 @@ function AnimatedNode({
             node={child}
             transforms={transforms}
             selectedIds={selectedIds}
+            originX={originX}
+            originY={originY}
           />
         ))}
       </g>
@@ -107,6 +138,8 @@ function AnimatedNode({
                 node={child}
                 transforms={transforms}
                 selectedIds={selectedIds}
+                originX={originX}
+                originY={originY}
               />
             ))
           : node.textContent}
@@ -135,6 +168,10 @@ export function AnimatedSvgPreview({
   onSelectElement: (elementId: string | null) => void;
 }) {
   const selectedIds = new Set(selectedElementIds);
+  const vb = parsed.viewBox.split(/[\s,]+/).map(Number);
+  const originX = (vb[0] || 0) + (vb[2] || 24) / 2;
+  const originY = (vb[1] || 0) + (vb[3] || 24) / 2;
+
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -181,6 +218,8 @@ export function AnimatedSvgPreview({
           node={node}
           transforms={transforms}
           selectedIds={selectedIds}
+          originX={originX}
+          originY={originY}
         />
       ))}
     </svg>
