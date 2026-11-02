@@ -1184,7 +1184,7 @@ export const useProjectStore = create<Store>((set, get) => ({
 
     const duration = current.animation.duration || 1200;
     const motionProps = buildMotionProperties(tool, duration);
-    let tracks = [...current.animation.tracks];
+    const tracks = [...current.animation.tracks];
 
     for (const elementId of selected.elementIds) {
       const existingIdx = tracks.findIndex((t) => t.elementId === elementId);
@@ -1230,7 +1230,7 @@ export const useProjectStore = create<Store>((set, get) => ({
     if (!anim) return;
 
     const time = Math.round(ui.currentTime);
-    let tracks = [...anim.tracks];
+    const tracks = [...anim.tracks];
 
     for (const elementId of component.elementIds) {
       const idx = tracks.findIndex((t) => t.elementId === elementId);

@@ -27,13 +27,26 @@ export function IconBrowser() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [library, setLibrary] = useState<LibraryId | "all">("ph");
-  const [icons, setIcons] = useState<IconRecord[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState<{
+    q: string;
+    library: LibraryId | "all";
+    icons: IconRecord[];
+    hasMore: boolean;
+  } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeFamily, setActiveFamily] = useState<IconRecord | null>(null);
   const [variantId, setVariantId] = useState<string>("regular");
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const icons = page?.q === deferredQuery && page?.library === library
+    ? page.icons
+    : [];
+  const hasMore =
+    page?.q === deferredQuery && page?.library === library
+      ? page.hasMore
+      : false;
+  const loading = !(page?.q === deferredQuery && page?.library === library);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -46,11 +59,11 @@ export function IconBrowser() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setActiveFamily(null);
+    const q = deferredQuery;
+    const lib = library;
     const params = new URLSearchParams({
-      q: deferredQuery,
-      library,
+      q,
+      library: lib,
       limit: String(PAGE),
       offset: "0",
     });
@@ -58,16 +71,18 @@ export function IconBrowser() {
       .then((res) => res.json())
       .then((data: { icons?: IconRecord[]; hasMore?: boolean }) => {
         if (!active) return;
-        setIcons(data.icons ?? []);
-        setHasMore(!!data.hasMore);
+        setActiveFamily(null);
+        setPage({
+          q,
+          library: lib,
+          icons: data.icons ?? [],
+          hasMore: !!data.hasMore,
+        });
       })
       .catch(() => {
         if (!active) return;
-        setIcons([]);
-        setHasMore(false);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+        setActiveFamily(null);
+        setPage({ q, library: lib, icons: [], hasMore: false });
       });
     return () => {
       active = false;
@@ -75,24 +90,31 @@ export function IconBrowser() {
   }, [deferredQuery, library]);
 
   const loadMore = () => {
+    if (loading || loadingMore) return;
     const params = new URLSearchParams({
       q: deferredQuery,
       library,
       limit: String(PAGE),
       offset: String(icons.length),
     });
-    setLoading(true);
+    setLoadingMore(true);
     fetch(`/api/icons/search?${params.toString()}`, { cache: "no-store" })
       .then((res) => res.json())
       .then((data: { icons?: IconRecord[]; hasMore?: boolean }) => {
         const next = data.icons ?? [];
-        setIcons((prev) => {
-          const seen = new Set(prev.map((i) => i.id));
-          return [...prev, ...next.filter((i) => !seen.has(i.id))];
+        setPage((prev) => {
+          if (!prev || prev.q !== deferredQuery || prev.library !== library) {
+            return prev;
+          }
+          const seen = new Set(prev.icons.map((i) => i.id));
+          return {
+            ...prev,
+            icons: [...prev.icons, ...next.filter((i) => !seen.has(i.id))],
+            hasMore: !!data.hasMore && next.length > 0,
+          };
         });
-        setHasMore(!!data.hasMore && next.length > 0);
       })
-      .finally(() => setLoading(false));
+      .finally(() => setLoadingMore(false));
   };
 
   const previewSvg = useMemo(() => {
@@ -319,11 +341,11 @@ export function IconBrowser() {
         {hasMore && (
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || loadingMore}
             onClick={loadMore}
             className="mt-2 h-8 w-full rounded-lg border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:bg-black/[0.03] disabled:opacity-50"
           >
-            {loading ? "Loading…" : "Load more"}
+            {loading || loadingMore ? "Loading…" : "Load more"}
           </button>
         )}
       </div>

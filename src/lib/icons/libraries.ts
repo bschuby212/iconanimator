@@ -63,6 +63,13 @@ export const LIBRARIES: LibraryMeta[] = [
     hasVariants: true,
   },
   {
+    id: "feather",
+    name: "Feather",
+    license: "MIT",
+    prefix: "feather",
+    hasVariants: false,
+  },
+  {
     id: "iconoir",
     name: "Iconoir",
     license: "MIT",

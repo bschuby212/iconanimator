@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "@/store/project-store";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +35,15 @@ export function ExportDialog() {
     if (!project.animation) return null;
     return validateExportCompatibility(project.animation, format);
   }, [project.animation, format]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExportOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, setExportOpen]);
 
   if (!open) return null;
 
@@ -110,8 +119,20 @@ export function ExportDialog() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white shadow-xl ring-1 ring-[var(--border)]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      role="presentation"
+      onClick={() => setExportOpen(false)}
+      data-testid="export-dialog-backdrop"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export"
+        data-testid="export-dialog"
+        className="w-full max-w-md rounded-xl bg-white shadow-xl ring-1 ring-[var(--border)]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h2 className="text-sm font-semibold">Export</h2>
           <Button size="sm" variant="ghost" onClick={() => setExportOpen(false)}>
