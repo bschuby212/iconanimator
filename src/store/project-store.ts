@@ -32,6 +32,7 @@ import {
   refineAnimation,
   shouldAskClarification,
 } from "@/lib/ai/rules-engine";
+import { resolveIconFromPrompt } from "@/lib/ai/prompt-icon";
 import { saveProject } from "@/lib/persistence/db";
 import {
   buildMotionProperties,
@@ -102,7 +103,7 @@ interface Store {
   clearIconKeepText: () => void;
   groupSelected: (name: string) => void;
   ungroup: (componentId: string) => void;
-  sendChat: (message: string) => void;
+  sendChat: (message: string) => Promise<void>;
   generateFromPlan: () => void;
   refineWithPrompt: (message: string) => void;
   updateAnimation: (doc: AnimationDocument) => void;
@@ -592,52 +593,134 @@ export const useProjectStore = create<Store>((set, get) => ({
       },
     })),
 
-  sendChat: (message) => {
-    const { project, ui } = get();
-    if (!hasAnimatableContent(project) || !message.trim()) return;
-    const name = subjectName(project);
+  sendChat: async (message) => {
+    if (!message.trim()) return;
     const userMsg = createUserMessage(message);
-    const reply = chatReply(
-      message,
-      name,
-      project.components,
-      project.intent,
-      !!project.plan,
-    );
+    set((s) => ({ ui: { ...s.ui, generating: true } }));
 
-    let plan: AnimationPlan | null = project.plan;
-    if (reply.updatePlan || !project.plan) {
-      plan = buildPlanFromPrompt(
-        message,
+    try {
+      const resolved = await resolveIconFromPrompt(message);
+      let { project, ui } = get();
+
+      // Load icon from natural language when asked (e.g. "settings from tabler")
+      if (resolved.request.wantsIcon) {
+        if (!resolved.icon) {
+          const assistant = createAssistantMessage(
+            resolved.error ||
+              "I couldn't find that icon. Try a name like settings, trash, or heart, and optionally a library (Tabler, Lucide, Phosphor).",
+          );
+          const conversation = [...project.conversation, userMsg, assistant];
+          set({
+            project: { ...project, conversation },
+            ui: { ...ui, generating: false, readyToGenerate: false },
+          });
+          return;
+        }
+
+        get().selectIcon({
+          id: resolved.icon.id,
+          name: resolved.icon.name,
+          library: resolved.icon.library,
+          svg: resolved.icon.svg,
+          keywords: resolved.icon.keywords,
+        });
+        project = get().project;
+        ui = get().ui;
+      }
+
+      if (!hasAnimatableContent(project)) {
+        const assistant = createAssistantMessage(
+          "Tell me which icon to use — e.g. “Put the settings icon from Tabler and make it spin.” You can also pick one from the library.",
+        );
+        const conversation = [...project.conversation, userMsg, assistant];
+        set({
+          project: { ...project, conversation },
+          ui: { ...ui, generating: false, readyToGenerate: false, rightTab: "chat" },
+        });
+        return;
+      }
+
+      const planPrompt = resolved.request.motionPrompt || message;
+      const name = subjectName(project);
+      const reply = chatReply(
+        planPrompt,
         name,
         project.components,
         project.intent,
+        !!project.plan,
       );
-    }
 
-    // Clear request: if no clarification needed, mark ready
-    const ready =
-      reply.readyToGenerate &&
-      (!shouldAskClarification(message) || project.conversation.length > 1);
+      let plan: AnimationPlan | null = project.plan;
+      if (reply.updatePlan || !project.plan) {
+        plan = buildPlanFromPrompt(
+          planPrompt,
+          name,
+          project.components,
+          project.intent,
+        );
+      }
 
-    const assistant = createAssistantMessage(reply.message);
-    const conversation = [...project.conversation, userMsg, assistant];
-    const creationHistory = upsertCreation(project, {
-      status: plan ? "planned" : "draft",
-      prompt: message,
-      plan,
-      conversation,
-      updatedAt: Date.now(),
-    });
-    set({
-      project: {
-        ...project,
-        conversation,
+      const loadedNote = resolved.icon
+        ? `Loaded ${resolved.icon.libraryName} “${resolved.icon.name}”. `
+        : "";
+      const assistant = createAssistantMessage(
+        `${loadedNote}${reply.message}`.trim(),
+      );
+      const conversation = [...(project.conversation ?? []), userMsg, assistant];
+
+      const ready =
+        (reply.readyToGenerate &&
+          (!shouldAskClarification(planPrompt) ||
+            project.conversation.length > 1 ||
+            resolved.request.autoGenerate)) ||
+        resolved.request.autoGenerate;
+
+      const creationHistory = upsertCreation(project, {
+        status: plan ? "planned" : "draft",
+        prompt: message,
         plan,
-        creationHistory,
-      },
-      ui: { ...ui, readyToGenerate: ready || reply.readyToGenerate },
-    });
+        conversation,
+        updatedAt: Date.now(),
+      });
+
+      set({
+        project: {
+          ...get().project,
+          conversation,
+          plan,
+          creationHistory,
+        },
+        ui: {
+          ...get().ui,
+          generating: false,
+          readyToGenerate: ready || reply.readyToGenerate,
+          rightTab: "chat",
+        },
+      });
+
+      // Clear icon + motion prompts: generate immediately
+      if (
+        (resolved.request.autoGenerate || ready) &&
+        plan &&
+        !get().project.animation
+      ) {
+        get().generateFromPlan();
+      }
+    } catch (e) {
+      const { project, ui } = get();
+      const assistant = createAssistantMessage(
+        e instanceof Error
+          ? `Something went wrong: ${e.message}`
+          : "Something went wrong loading that icon.",
+      );
+      set({
+        project: {
+          ...project,
+          conversation: [...project.conversation, userMsg, assistant],
+        },
+        ui: { ...ui, generating: false },
+      });
+    }
   },
 
   generateFromPlan: () => {
