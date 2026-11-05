@@ -18,12 +18,14 @@ export async function POST(req: Request) {
     components,
     intent,
     hasPlan,
+    selectedComponentIds,
   }: {
     message: string;
     iconName: string;
     components: SvgComponent[];
     intent?: AnimationIntent;
     hasPlan?: boolean;
+    selectedComponentIds?: string[];
   } = body;
 
   if (!message || !iconName) {
@@ -31,6 +33,7 @@ export async function POST(req: Request) {
   }
 
   const resolvedIntent = intent ?? DEFAULT_INTENT;
+  const selectedIds = selectedComponentIds ?? [];
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (apiKey) {
@@ -38,6 +41,10 @@ export async function POST(req: Request) {
       const componentSummary = components
         .map((c) => `${c.name} (${c.role}): ${c.elementIds.join(",")}`)
         .join("\n");
+      const selectedNames = components
+        .filter((c) => selectedIds.includes(c.id))
+        .map((c) => c.name)
+        .join(", ");
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -50,7 +57,7 @@ export async function POST(req: Request) {
           messages: [
             {
               role: "system",
-              content: `You are an icon animation assistant. Components:\n${componentSummary}\nOnly suggest motions those components can perform. Be concise. Ask at most one clarifying question when needed.`,
+              content: `You are an icon animation assistant. Be decisive: assume a sensible motion when the user is vague. Prefer the selected layer when they say "it/this" or don't name a part. Never require exact layer labels like "Part 1". Components:\n${componentSummary}\nSelected: ${selectedNames || "none"}\nOnly suggest motions those components can perform. Be concise. Prefer proposing a concrete plan over asking clarifying questions.`,
             },
             { role: "user", content: message },
           ],
@@ -64,6 +71,7 @@ export async function POST(req: Request) {
           iconName,
           components,
           resolvedIntent,
+          selectedIds,
         );
         return NextResponse.json({
           message: content,
@@ -82,12 +90,14 @@ export async function POST(req: Request) {
     components,
     resolvedIntent,
     !!hasPlan,
+    selectedIds,
   );
   const plan = buildPlanFromPrompt(
     message,
     iconName,
     components,
     resolvedIntent,
+    selectedIds,
   );
 
   return NextResponse.json({

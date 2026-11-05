@@ -93,6 +93,15 @@ interface Store {
   /** Canvas click: select a single SVG path/group and make it animatable. */
   selectCanvasElement: (elementId: string | null) => void;
   renameComponent: (id: string, name: string) => void;
+  /** Reorder layers in the timeline / layers list (dragId → before/at targetId). */
+  reorderComponents: (dragId: string, targetId: string) => void;
+  selectKeyframe: (id: string | null) => void;
+  /** Shift every keyframe on a property track by deltaMs (clamped to duration). */
+  shiftTrackProperty: (
+    elementId: string,
+    property: string,
+    deltaMs: number,
+  ) => void;
   setTransformOrigin: (
     componentId: string,
     origin: { x: number; y: number; absolute?: boolean },
@@ -439,8 +448,85 @@ export const useProjectStore = create<Store>((set, get) => ({
         components: s.project.components.map((c) =>
           c.id === id ? { ...c, name } : c,
         ),
+        animation: s.project.animation
+          ? {
+              ...s.project.animation,
+              tracks: s.project.animation.tracks.map((t) => {
+                const cmp = s.project.components.find((c) => c.id === id);
+                if (!cmp?.elementIds.includes(t.elementId)) return t;
+                return { ...t, name };
+              }),
+            }
+          : s.project.animation,
       },
     })),
+
+  reorderComponents: (dragId, targetId) => {
+    const { project } = get();
+    if (dragId === targetId) return;
+
+    const components = [...project.components];
+    const fromIdx = components.findIndex((c) => c.id === dragId);
+    const toIdx = components.findIndex((c) => c.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    const [moved] = components.splice(fromIdx, 1);
+    components.splice(toIdx, 0, moved);
+
+    let animation = project.animation;
+    if (animation) {
+      const groupKey = (elementId: string) => {
+        const cmp = components.find((c) => c.elementIds.includes(elementId));
+        return cmp?.id ?? elementId;
+      };
+      const order = components.map((c) => c.id);
+      const ranked = (key: string) => {
+        const i = order.indexOf(key);
+        return i >= 0 ? i : order.length;
+      };
+      const tracks = [...animation.tracks].sort(
+        (a, b) => ranked(groupKey(a.elementId)) - ranked(groupKey(b.elementId)),
+      );
+      animation = { ...animation, tracks };
+    }
+
+    set({ project: { ...project, components, animation } });
+  },
+
+  selectKeyframe: (id) =>
+    set((s) => ({ ui: { ...s.ui, selectedKeyframeId: id } })),
+
+  shiftTrackProperty: (elementId, property, deltaMs) => {
+    const { project } = get();
+    if (!project.animation || deltaMs === 0) return;
+    const duration = project.animation.duration;
+    const animation: AnimationDocument = {
+      ...project.animation,
+      tracks: project.animation.tracks.map((t) => {
+        if (t.elementId !== elementId) return t;
+        return {
+          ...t,
+          properties: t.properties.map((p) => {
+            if (p.property !== property) return p;
+            const times = p.keyframes.map((k) => k.time);
+            const minT = Math.min(...times);
+            const maxT = Math.max(...times);
+            let delta = deltaMs;
+            if (minT + delta < 0) delta = -minT;
+            if (maxT + delta > duration) delta = duration - maxT;
+            if (delta === 0) return p;
+            return {
+              ...p,
+              keyframes: p.keyframes
+                .map((k) => ({ ...k, time: Math.round(k.time + delta) }))
+                .sort((a, b) => a.time - b.time),
+            };
+          }),
+        };
+      }),
+    };
+    get().updateAnimation(animation);
+  },
 
   setTransformOrigin: (componentId, origin) =>
     set((s) => ({
@@ -737,12 +823,14 @@ export const useProjectStore = create<Store>((set, get) => ({
 
       const planPrompt = resolved.request.motionPrompt || message;
       const name = subjectName(project);
+      const selectedIds = ui.selectedComponentIds;
       const reply = chatReply(
         planPrompt,
         name,
         project.components,
         project.intent,
         !!project.plan,
+        selectedIds,
       );
 
       let plan: AnimationPlan | null = project.plan;
@@ -752,6 +840,7 @@ export const useProjectStore = create<Store>((set, get) => ({
           name,
           project.components,
           project.intent,
+          selectedIds,
         );
       }
 
@@ -840,6 +929,7 @@ export const useProjectStore = create<Store>((set, get) => ({
       components,
       project.intent,
       lastUser || project.plan.steps.map((s) => s.description).join(" "),
+      ui.selectedComponentIds,
     );
     // Loop by default so the canvas keeps a live preview after generation
     const animation = {
@@ -1176,6 +1266,7 @@ export const useProjectStore = create<Store>((set, get) => ({
   updateTrackProperty: (elementId, property, keyframeId, patch) => {
     const { project } = get();
     if (!project.animation) return;
+    const duration = project.animation.duration;
     const animation: AnimationDocument = {
       ...project.animation,
       tracks: project.animation.tracks.map((t) => {
@@ -1186,15 +1277,27 @@ export const useProjectStore = create<Store>((set, get) => ({
             if (p.property !== property) return p;
             return {
               ...p,
-              keyframes: p.keyframes.map((k) =>
-                k.id === keyframeId ? { ...k, ...patch } : k,
-              ),
+              keyframes: p.keyframes
+                .map((k) => {
+                  if (k.id !== keyframeId) return k;
+                  const next = { ...k, ...patch };
+                  if (typeof next.time === "number") {
+                    next.time = Math.round(
+                      Math.min(Math.max(next.time, 0), duration),
+                    );
+                  }
+                  return next;
+                })
+                .sort((a, b) => a.time - b.time),
             };
           }),
         };
       }),
     };
     get().updateAnimation(animation);
+    if (patch.time !== undefined) {
+      set((s) => ({ ui: { ...s.ui, selectedKeyframeId: keyframeId } }));
+    }
   },
 
   setDuration: (ms) => {

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPlanFromPrompt,
+  chatReply,
   generateAnimationFromPlan,
   parseDurationMs,
   parseRotationDegrees,
   parseScalePeak,
   refineAnimation,
   rejectsScaleMotion,
+  resolveTargetComponents,
   wantsScaleMotion,
 } from "@/lib/ai/rules-engine";
 import { DEFAULT_INTENT, type SvgComponent } from "@/lib/animation/types";
@@ -171,5 +173,44 @@ describe("refine follow-ups", () => {
     expect(Number(getElementPropertyAt(next, "el_gear", "scaleX", 1000) ?? 1)).toBeCloseTo(1, 2);
     const rot = track?.properties.find((p) => p.property === "rotation");
     expect(Number(rot?.keyframes[rot.keyframes.length - 1]?.value)).toBeCloseTo(360, 0);
+  });
+});
+
+describe("resolveTargetComponents", () => {
+  const part: SvgComponent = {
+    id: "cmp_part",
+    name: "Part 1",
+    role: "other",
+    elementIds: ["el_a"],
+    transformOrigin: { x: 0.5, y: 0.5 },
+  };
+  const lid: SvgComponent = {
+    id: "cmp_lid",
+    name: "Lid",
+    role: "lid",
+    elementIds: ["el_lid"],
+    transformOrigin: { x: 0.5, y: 0.5 },
+  };
+
+  it("uses canvas selection without requiring a layer name", () => {
+    const hits = resolveTargetComponents("spin this", [part, lid], [part.id]);
+    expect(hits.map((c) => c.id)).toEqual([part.id]);
+  });
+
+  it("matches role words without exact labels", () => {
+    const hits = resolveTargetComponents("open the lid a bit", [part, lid], []);
+    expect(hits[0]?.role).toBe("lid");
+  });
+
+  it("assumes gear motion for vague interactive prompts", () => {
+    const reply = chatReply(
+      "Make this feel interactive",
+      "settings",
+      [gearComponent],
+      DEFAULT_INTENT,
+      false,
+    );
+    expect(reply.readyToGenerate).toBe(true);
+    expect(reply.message.toLowerCase()).toMatch(/rotate|gear|settle|motion/);
   });
 });

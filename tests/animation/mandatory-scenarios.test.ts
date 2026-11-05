@@ -329,7 +329,7 @@ describe("Complexity levels", () => {
 });
 
 describe("AI conversation scenarios", () => {
-  it("Scenario A: ambiguous request asks clarification", () => {
+  it("Scenario A: vague request assumes a concrete motion", () => {
     const { components } = loadIcon("settings");
     const reply = chatReply(
       "Make this icon feel interactive.",
@@ -338,8 +338,9 @@ describe("AI conversation scenarios", () => {
       DEFAULT_INTENT,
       false,
     );
-    expect(reply.readyToGenerate).toBe(false);
-    expect(reply.message.toLowerCase()).toMatch(/subtle|playful|rotate|gear/);
+    expect(reply.readyToGenerate).toBe(true);
+    expect(reply.updatePlan).toBe(true);
+    expect(reply.message.toLowerCase()).toMatch(/rotate|gear|motion|settle/);
   });
 
   it("Scenario B: subtle trash lid", () => {

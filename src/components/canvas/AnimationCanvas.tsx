@@ -326,6 +326,14 @@ export function AnimationCanvas() {
                 size={iconDisplay}
                 color={project.strokeColor}
                 onSelectElement={(id) => selectCanvasElement(id)}
+                labelForElement={(elementId) => {
+                  const cmp = project.components.find((c) =>
+                    c.elementIds.includes(elementId),
+                  );
+                  if (cmp?.name) return cmp.name;
+                  const node = project.parsed?.elementMap[elementId];
+                  return node?.originalId || node?.tag || elementId;
+                }}
               />
             </div>
           </div>
