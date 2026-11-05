@@ -47,11 +47,13 @@ export async function POST(req: Request) {
     iconName,
     components,
     intent,
+    selectedComponentIds,
   }: {
     prompt: string;
     iconName: string;
     components: SvgComponent[];
     intent?: AnimationIntent;
+    selectedComponentIds?: string[];
   } = body;
 
   if (!prompt || !iconName || !components) {
@@ -59,17 +61,20 @@ export async function POST(req: Request) {
   }
 
   const resolvedIntent = intent ?? DEFAULT_INTENT;
+  const selectedIds = selectedComponentIds ?? [];
   const plan = buildPlanFromPrompt(
     prompt,
     iconName,
     components,
     resolvedIntent,
+    selectedIds,
   );
   const animation = generateAnimationFromPlan(
     plan,
     components,
     resolvedIntent,
     prompt,
+    selectedIds,
   );
 
   const validated = animationSchema.safeParse(animation);

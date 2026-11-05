@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import { GripVertical, Pause, Play, RotateCcw } from "lucide-react";
 import { useProjectStore } from "@/store/project-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
@@ -19,8 +19,14 @@ export function Timeline() {
   const setPlaying = useProjectStore((s) => s.setPlaying);
   const setDuration = useProjectStore((s) => s.setDuration);
   const updateTrackProperty = useProjectStore((s) => s.updateTrackProperty);
+  const shiftTrackProperty = useProjectStore((s) => s.shiftTrackProperty);
   const selectComponents = useProjectStore((s) => s.selectComponents);
+  const selectKeyframe = useProjectStore((s) => s.selectKeyframe);
+  const renameComponent = useProjectStore((s) => s.renameComponent);
+  const reorderComponents = useProjectStore((s) => s.reorderComponents);
   const trackRef = useRef<HTMLDivElement>(null);
+  const [dragRowId, setDragRowId] = useState<string | null>(null);
+  const [dropRowId, setDropRowId] = useState<string | null>(null);
 
   const duration = Math.max(project.animation?.duration ?? 1000, 1);
   const hasAnim = !!project.animation;
@@ -54,6 +60,11 @@ export function Timeline() {
       }
       row.tracks.push(track);
     }
+    // Prefer project.components order when available
+    const order = new Map(project.components.map((c, i) => [c.id, i]));
+    byComponent.sort(
+      (a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999),
+    );
     return byComponent;
   }, [project]);
 
@@ -64,6 +75,12 @@ export function Timeline() {
     const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
     setCurrentTime((x / rect.width) * duration);
     setPlaying(false);
+  };
+
+  const timeFromClientX = (clientX: number, el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+    return Math.round((x / Math.max(rect.width, 1)) * duration);
   };
 
   const onSliderChange = (value: number) => {
@@ -194,24 +211,67 @@ export function Timeline() {
                 (n, t) => n + t.properties.length,
                 0,
               );
+              const isDrop = dropRowId === row.id && dragRowId !== row.id;
               return (
                 <div
                   key={row.id}
-                  className="border-b border-[var(--border)]"
+                  className={cn(
+                    "border-b border-[var(--border)]",
+                    isDrop && "bg-[#0f9f8a]/10",
+                    dragRowId === row.id && "opacity-60",
+                  )}
                   style={{ height: 28 + propCount * 22 }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDropRowId(row.id);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const from = e.dataTransfer.getData("text/layer-id") || dragRowId;
+                    if (from && from !== row.id) reorderComponents(from, row.id);
+                    setDragRowId(null);
+                    setDropRowId(null);
+                  }}
                 >
-                  <button
-                    type="button"
-                    className="flex h-7 w-full items-center truncate px-2 text-left text-xs font-medium hover:bg-black/[0.02]"
-                    onClick={() => selectComponents([row.id])}
-                  >
-                    {row.name}
-                  </button>
+                  <div className="flex h-7 w-full items-center gap-0.5 px-1">
+                    <button
+                      type="button"
+                      draggable
+                      className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded text-[var(--text-secondary)] hover:bg-black/[0.04] active:cursor-grabbing"
+                      title="Drag to reorder"
+                      aria-label={`Reorder ${row.name}`}
+                      data-testid={`timeline-layer-drag-${row.id}`}
+                      onDragStart={(e) => {
+                        setDragRowId(row.id);
+                        e.dataTransfer.setData("text/layer-id", row.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setDragRowId(null);
+                        setDropRowId(null);
+                      }}
+                    >
+                      <GripVertical className="h-3.5 w-3.5" />
+                    </button>
+                    <input
+                      className="h-6 min-w-0 flex-1 truncate rounded border border-transparent bg-transparent px-1 text-left text-xs font-medium outline-none hover:border-[var(--border)] focus:border-[#0f9f8a]/40"
+                      value={row.name}
+                      title="Rename layer"
+                      aria-label="Layer name"
+                      data-testid={`timeline-layer-name-${row.id}`}
+                      onFocus={() => selectComponents([row.id])}
+                      onChange={(e) => {
+                        if (project.components.some((c) => c.id === row.id)) {
+                          renameComponent(row.id, e.target.value);
+                        }
+                      }}
+                    />
+                  </div>
                   {row.tracks.flatMap((t) =>
                     t.properties.map((p) => (
                       <div
                         key={`${t.elementId}-${p.property}`}
-                        className="flex h-[22px] items-center px-2 text-[10px] capitalize text-[var(--text-secondary)]"
+                        className="flex h-[22px] items-center px-2 pl-6 text-[10px] capitalize text-[var(--text-secondary)]"
                       >
                         {p.property}
                       </div>
@@ -257,51 +317,122 @@ export function Timeline() {
               <div key={row.id} className="border-b border-[var(--border)]">
                 <div className="h-7" />
                 {row.tracks.flatMap((t) =>
-                  t.properties.map((p) => (
-                    <div
-                      key={`${t.elementId}-${p.property}`}
-                      className="relative h-[22px]"
-                      onMouseDown={(e) => onScrub(e.clientX)}
-                    >
+                  t.properties.map((p) => {
+                    const start = p.keyframes[0]?.time ?? 0;
+                    const end = p.keyframes.at(-1)?.time ?? 0;
+                    return (
                       <div
-                        className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#0f9f8a]/20"
-                        style={{
-                          left: `${((p.keyframes[0]?.time ?? 0) / duration) * 100}%`,
-                          width: `${(((p.keyframes.at(-1)?.time ?? 0) - (p.keyframes[0]?.time ?? 0)) / duration) * 100}%`,
+                        key={`${t.elementId}-${p.property}`}
+                        className="relative h-[22px]"
+                        onMouseDown={(e) => {
+                          if ((e.target as HTMLElement).closest("[data-keyframe]"))
+                            return;
+                          onScrub(e.clientX);
                         }}
-                      />
-                      {p.keyframes.map((k) => (
-                        <button
-                          key={k.id}
-                          title={`${k.time}ms = ${k.value}`}
-                          className={cn(
-                            "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-[#0f9f8a] bg-white",
-                            ui.selectedKeyframeId === k.id && "bg-[#0f9f8a]",
-                          )}
-                          style={{ left: `${(k.time / duration) * 100}%` }}
-                          onClick={(e) => {
+                      >
+                        <div
+                          className="absolute top-1/2 h-1 -translate-y-1/2 cursor-grab rounded-full bg-[#0f9f8a]/20 active:cursor-grabbing"
+                          style={{
+                            left: `${(start / duration) * 100}%`,
+                            width: `${((end - start) / duration) * 100}%`,
+                          }}
+                          title="Drag to move track"
+                          onMouseDown={(e) => {
                             e.stopPropagation();
-                            selectComponents(
-                              project.components
-                                .filter((c) =>
-                                  c.elementIds.includes(t.elementId),
-                                )
-                                .map((c) => c.id),
-                            );
-                            const next = window.prompt(
-                              `Edit ${p.property} at ${k.time}ms`,
-                              String(k.value),
-                            );
-                            if (next === null) return;
-                            const num = Number(next);
-                            updateTrackProperty(t.elementId, p.property, k.id, {
-                              value: Number.isFinite(num) ? num : next,
-                            });
+                            e.preventDefault();
+                            let lastX = e.clientX;
+                            const parent = (
+                              e.currentTarget as HTMLElement
+                            ).parentElement;
+                            const move = (ev: MouseEvent) => {
+                              if (!parent) return;
+                              const rect = parent.getBoundingClientRect();
+                              const step = Math.round(
+                                ((ev.clientX - lastX) /
+                                  Math.max(rect.width, 1)) *
+                                  duration,
+                              );
+                              if (step !== 0) {
+                                shiftTrackProperty(
+                                  t.elementId,
+                                  p.property,
+                                  step,
+                                );
+                                lastX = ev.clientX;
+                              }
+                            };
+                            const up = () => {
+                              window.removeEventListener("mousemove", move);
+                              window.removeEventListener("mouseup", up);
+                            };
+                            window.addEventListener("mousemove", move);
+                            window.addEventListener("mouseup", up);
                           }}
                         />
-                      ))}
-                    </div>
-                  )),
+                        {p.keyframes.map((k) => (
+                          <button
+                            key={k.id}
+                            data-keyframe
+                            title={`${k.time}ms = ${k.value} (drag to move)`}
+                            className={cn(
+                              "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-sm border border-[#0f9f8a] bg-white",
+                              ui.selectedKeyframeId === k.id && "bg-[#0f9f8a]",
+                            )}
+                            style={{ left: `${(k.time / duration) * 100}%` }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectKeyframe(k.id);
+                              selectComponents(
+                                project.components
+                                  .filter((c) =>
+                                    c.elementIds.includes(t.elementId),
+                                  )
+                                  .map((c) => c.id),
+                              );
+                            }}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              const next = window.prompt(
+                                `Edit ${p.property} at ${k.time}ms`,
+                                String(k.value),
+                              );
+                              if (next === null) return;
+                              const num = Number(next);
+                              updateTrackProperty(t.elementId, p.property, k.id, {
+                                value: Number.isFinite(num) ? num : next,
+                              });
+                            }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              selectKeyframe(k.id);
+                              const rowEl = (
+                                e.currentTarget as HTMLElement
+                              ).parentElement;
+                              if (!rowEl) return;
+                              const move = (ev: MouseEvent) => {
+                                const time = timeFromClientX(ev.clientX, rowEl);
+                                updateTrackProperty(
+                                  t.elementId,
+                                  p.property,
+                                  k.id,
+                                  { time },
+                                );
+                                setCurrentTime(time);
+                                setPlaying(false);
+                              };
+                              const up = () => {
+                                window.removeEventListener("mousemove", move);
+                                window.removeEventListener("mouseup", up);
+                              };
+                              window.addEventListener("mousemove", move);
+                              window.addEventListener("mouseup", up);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    );
+                  }),
                 )}
               </div>
             ))}

@@ -407,6 +407,114 @@ function textComponents(components: SvgComponent[]): SvgComponent[] {
   return components.filter((c) => c.role === "text");
 }
 
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Match layers from natural language without requiring exact layer names.
+ * Uses roles, distinctive name tokens, and soft partials — skips generic "Part N".
+ */
+export function matchComponentsFromPrompt(
+  prompt: string,
+  components: SvgComponent[],
+): SvgComponent[] {
+  const p = prompt.toLowerCase();
+  const hits: SvgComponent[] = [];
+  for (const c of components) {
+    const role = (c.role ?? "other").toLowerCase();
+    if (role !== "other" && new RegExp(`\\b${escapeRegExp(role)}s?\\b`).test(p)) {
+      hits.push(c);
+      continue;
+    }
+    const name = c.name.toLowerCase();
+    if (name.length >= 3 && !/^part\s*\d+$/i.test(c.name) && p.includes(name)) {
+      hits.push(c);
+      continue;
+    }
+    const tokens = name
+      .split(/[\s_\-/]+/)
+      .map((t) => t.trim())
+      .filter(
+        (t) =>
+          t.length > 2 &&
+          !/^(part|layer|group|path|icon)$/i.test(t) &&
+          !/^\d+$/.test(t),
+      );
+    if (tokens.some((t) => new RegExp(`\\b${escapeRegExp(t)}s?\\b`).test(p))) {
+      hits.push(c);
+    }
+  }
+  return hits;
+}
+
+const STRUCTURED_ROLES = [
+  "gear",
+  "lid",
+  "pencil",
+  "bell",
+  "shackle",
+  "arrow",
+  "glass",
+  "flap",
+  "letter",
+  "clapper",
+  "tray",
+  "paper",
+  "body",
+] as const;
+
+/**
+ * Pick which layer(s) a prompt refers to. Prefers named/role matches, then the
+ * canvas selection, then a structured primary part — so users don't have to
+ * say "Part 1" or the exact layer label.
+ */
+export function resolveTargetComponents(
+  prompt: string,
+  components: SvgComponent[],
+  selectedIds: string[] = [],
+): SvgComponent[] {
+  if (!components.length) return [];
+
+  const named = matchComponentsFromPrompt(prompt, components);
+  if (named.length) return named;
+
+  const selected = components.filter((c) => selectedIds.includes(c.id));
+  const p = prompt.toLowerCase();
+  const deixis =
+    /\b(it|this|that|these|them|the layer|the part|the path|selection|selected|here)\b/.test(
+      p,
+    );
+  const motionVerb =
+    /\b(spin|rotate|fade|slide|bounce|wiggle|pulse|pop|float|shake|move|animate|twitch|nudge|drift|bloom|warp)\b/.test(
+      p,
+    );
+  if (selected.length && (deixis || motionVerb || selected.length === 1)) {
+    return selected;
+  }
+
+  // Explicit role word in the prompt (e.g. "spin the lid") even if name match missed
+  for (const role of STRUCTURED_ROLES) {
+    if (!p.includes(role)) continue;
+    const c = findComponentByRole(components, role);
+    if (c) return [c];
+  }
+
+  // Vague / motion-only: prefer the most animatable structured part
+  for (const role of ["gear", "lid", "pencil", "bell", "shackle", "arrow", "glass"] as const) {
+    const c = findComponentByRole(components, role);
+    if (c) return [c];
+  }
+
+  if (selected.length) return selected;
+
+  const texts = textComponents(components);
+  if (texts.length && texts.length === components.length) return texts;
+
+  const nonText = components.filter((c) => c.role !== "text");
+  return nonText.length ? [nonText[0]] : [components[0]];
+}
+
 function wantsTextMotion(prompt: string, components: SvgComponent[]): boolean {
   const p = prompt.toLowerCase();
   const texts = textComponents(components);
@@ -443,6 +551,7 @@ export function buildPlanFromPrompt(
   iconName: string,
   components: SvgComponent[],
   intent: AnimationIntent,
+  selectedIds: string[] = [],
 ): AnimationPlan {
   const p = prompt.toLowerCase();
   const scale = intensityScale(intent.intensity);
@@ -453,6 +562,7 @@ export function buildPlanFromPrompt(
   let loop = wantsLoopFromPrompt(prompt, intent);
   const explicitDuration = parseDurationMs(prompt);
   if (explicitDuration != null) duration = explicitDuration;
+  const assumed = resolveTargetComponents(prompt, components, selectedIds);
 
   const texts = textComponents(components);
   const lid = findComponentByRole(components, "lid");
@@ -608,18 +718,52 @@ export function buildPlanFromPrompt(
     steps.push(step("Return to the original position.", g));
     duration = 1400;
   } else if (p.includes("subtle") || p.includes("interactive") || p.includes("playful")) {
-    const target = gear ?? lid ?? texts[0] ?? components[0];
-    steps.push(
-      step(
-        `Propose a ${intent.intensity} motion on ${target?.name ?? "the icon"} with restrained timing.`,
-        target,
-      ),
-    );
+    const target = assumed[0] ?? gear ?? lid ?? texts[0] ?? components[0];
+    const label = target?.name ?? "the icon";
+    if (target?.role === "gear" || gear) {
+      steps.push(step(`Rotate ${label} with a light settle.`, target ?? gear));
+    } else if (target?.role === "lid" || lid) {
+      steps.push(step(`Open ${label} slightly, pause, then close.`, target ?? lid));
+    } else if (target?.role === "text") {
+      steps.push(step(describeTextMotion(prompt), target));
+    } else {
+      steps.push(
+        step(
+          `Give ${label} a short ${intent.intensity} motion with restrained timing.`,
+          target,
+        ),
+      );
+    }
     duration = 900;
   } else {
-    const target = texts[0] ?? components[0];
-    steps.push(step(`Animate ${target?.name ?? "icon"} according to: "${prompt}"`, target));
-    if (texts.length && target?.role !== "text") {
+    const target = assumed[0] ?? texts[0] ?? components[0];
+    const label = target?.name ?? "icon";
+    if (target?.role === "text") {
+      steps.push(step(describeTextMotion(prompt), target));
+    } else if (
+      /\b(spin|rotate|turn)\b/.test(p) ||
+      target?.role === "gear"
+    ) {
+      const rot = parseRotationDegrees(prompt, {
+        defaultDegrees: Math.round(180 * scale),
+        continuousDefault: 360,
+      });
+      steps.push(
+        step(
+          `Rotate ${label} ${rot < 0 ? "counterclockwise" : "clockwise"} ${Math.abs(rot)}°.`,
+          target,
+        ),
+      );
+    } else if (/\b(fade|opacity)\b/.test(p)) {
+      steps.push(step(`Fade ${label} in softly.`, target));
+    } else if (/\b(slide|nudge|drift|float)\b/.test(p)) {
+      steps.push(step(`Slide ${label} into place with a soft settle.`, target));
+    } else {
+      steps.push(
+        step(`Give ${label} a short ${intent.intensity} motion.`, target),
+      );
+    }
+    if (texts.length && target?.role !== "text" && wantsTextMotion(prompt, components)) {
       steps.push(step(describeTextMotion(prompt), texts[0]));
     }
     duration = 1000;
@@ -643,16 +787,18 @@ export function generateAnimationFromPlan(
   components: SvgComponent[],
   intent: AnimationIntent,
   prompt: string,
+  selectedIds: string[] = [],
 ): AnimationDocument {
   const p = prompt.toLowerCase();
   const scale = intensityScale(intent.intensity);
   const easing = styleEasing(intent.style);
   const doc = emptyDoc(`${plan.iconName} animation`, plan.duration, plan.loop);
   const D = plan.duration;
+  const assumed = resolveTargetComponents(prompt, components, selectedIds);
 
   const lid = findComponentByRole(components, "lid");
   const gear = findComponentByRole(components, "gear") ?? findComponentByRole(components, "center");
-  const gearMain = findComponentByRole(components, "gear") ?? components[0];
+  const gearMain = findComponentByRole(components, "gear") ?? assumed[0] ?? components[0];
   const pencil = findComponentByRole(components, "pencil");
   const shackle = findComponentByRole(components, "shackle");
   const bell = findComponentByRole(components, "bell");
@@ -1085,8 +1231,8 @@ export function generateAnimationFromPlan(
     return doc;
   }
 
-  // Generic fallback — animate primary component, not whole-icon nonsense without structure
-  const target = texts[0] ?? components[0];
+  // Generic fallback — animate assumed / selected / primary component
+  const target = assumed[0] ?? texts[0] ?? components[0];
   if (target?.role === "text") {
     doc.tracks.push(
       ...tracksForComponent(target, (id, name) =>
@@ -1296,9 +1442,12 @@ export function chatReply(
   components: SvgComponent[],
   intent: AnimationIntent,
   hasPlan: boolean,
+  selectedIds: string[] = [],
 ): { message: string; readyToGenerate: boolean; updatePlan: boolean } {
   const p = userMessage.toLowerCase().trim();
-  const names = components.map((c) => c.name).join(", ") || "the whole icon";
+  const targets = resolveTargetComponents(userMessage, components, selectedIds);
+  const target = targets[0];
+  const label = target?.name ?? iconName;
 
   if (
     p === "perfect" ||
@@ -1315,56 +1464,57 @@ export function chatReply(
     };
   }
 
-  const ambiguous =
+  const vague =
     p.includes("interactive") ||
     p.includes("feel") ||
     p === "make this subtle" ||
     p === "something playful" ||
+    p === "animate it" ||
     (p.length < 28 &&
       !p.includes("rotate") &&
       !p.includes("open") &&
       !p.includes("move") &&
       !p.includes("text") &&
       !p.includes("fade") &&
-      !p.includes("slide"));
+      !p.includes("slide") &&
+      !p.includes("spin"));
 
-  if (ambiguous && !hasPlan) {
+  // Assume a concrete motion instead of asking the user to name layers
+  if (vague && !hasPlan) {
     const gear = findComponentByRole(components, "gear");
     const lid = findComponentByRole(components, "lid");
     const texts = textComponents(components);
     if (texts.length && texts.length === components.length) {
       return {
-        message:
-          "I can fade the text in, slide it up, or pop it with a spring. Subtle or more playful?",
-        readyToGenerate: false,
+        message: `I'll fade “${label}” in with a soft settle — generate when you're ready.`,
+        readyToGenerate: true,
         updatePlan: true,
       };
     }
-    if (gear) {
+    if (target?.role === "gear" || gear) {
       return {
-        message:
-          "I can rotate the gear, scale it up, then ease back. Subtle or more playful?",
-        readyToGenerate: false,
+        message: `I'll rotate ${label === iconName ? "the gear" : `“${label}”`} with a light settle — generate when you're ready.`,
+        readyToGenerate: true,
         updatePlan: true,
       };
     }
-    if (lid) {
+    if (target?.role === "lid" || lid) {
       return {
-        message: "I can open the lid, pause, then close it. Subtle or more expressive?",
-        readyToGenerate: false,
+        message: `I'll open ${label === iconName ? "the lid" : `“${label}”`} slightly, pause, then close — generate when you're ready.`,
+        readyToGenerate: true,
         updatePlan: true,
       };
     }
-    if (texts.length) {
+    if (selectedIds.length && target) {
       return {
-        message: `I can animate ${names}, including the text layers. Fade, slide, or pop?`,
-        readyToGenerate: false,
+        message: `I'll animate the selected layer “${label}” with a short ${intent.intensity} motion — generate when you're ready.`,
+        readyToGenerate: true,
         updatePlan: true,
       };
     }
     return {
-      message: `I can animate ${names} with a short ${intent.intensity} motion. Subtle, expressive, or playful?`,
-      readyToGenerate: false,
+      message: `I'll give “${label}” a short ${intent.intensity} motion — generate when you're ready.`,
+      readyToGenerate: true,
       updatePlan: true,
     };
   }
@@ -1379,15 +1529,14 @@ export function chatReply(
     p.length < 48
   ) {
     return {
-      message: "Keeping motion small and timing short.",
+      message: `Keeping “${label}” small and snappy.`,
       readyToGenerate: true,
       updatePlan: true,
     };
   }
 
-  // Clear request — allow immediate generation
   return {
-    message: "Here’s a plan — generate when you’re ready.",
+    message: `Here’s a plan for “${label}” — generate when you’re ready.`,
     readyToGenerate: true,
     updatePlan: true,
   };
@@ -1395,16 +1544,9 @@ export function chatReply(
 
 export function shouldAskClarification(prompt: string): boolean {
   const p = prompt.toLowerCase().trim();
-  if (p.length < 12) return true;
-  if (
-    p.includes("interactive") ||
-    p.includes("feel") ||
-    p.includes("something") ||
-    p === "make this subtle" ||
-    p === "animate it"
-  ) {
-    return true;
-  }
+  // Only pause for empty / greeting prompts — otherwise assume and plan
+  if (p.length < 3) return true;
+  if (/^(hi|hello|hey|help|what|how)\b/.test(p) && p.length < 18) return true;
   return false;
 }
 
